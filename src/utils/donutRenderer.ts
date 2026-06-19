@@ -1,7 +1,7 @@
 import { COLORS } from '../config/theme';
 
-/** Set false in branding to use a custom PNG instead of the built-in toon donut. */
-export const USE_PROCEDURAL_DONUT = true;
+/** Set false to use the donut image at public/assets/donut.png */
+export const USE_PROCEDURAL_DONUT = false;
 
 const OUTLINE = '#2A1810';
 const OUTLINE_WIDTH_RATIO = 0.028;
@@ -360,13 +360,42 @@ export function loadDonutImage(imagePath: string): Promise<HTMLImageElement> {
   });
 }
 
+/** Remove near-black backdrop so artwork composites on the mirror feed. */
+export function knockOutDarkBackground(
+  image: HTMLImageElement,
+  threshold = 32,
+): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+
+  ctx.drawImage(image, 0, 0);
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    if (r <= threshold && g <= threshold && b <= threshold) {
+      data[i + 3] = 0;
+    }
+  }
+
+  ctx.putImageData(new ImageData(data, canvas.width, canvas.height), 0, 0);
+  return canvas;
+}
+
 export async function resolveDonutDrawable(
   imagePath: string,
 ): Promise<CanvasImageSource> {
   if (USE_PROCEDURAL_DONUT) {
     return getPremiumDonutCanvas();
   }
-  return loadDonutImage(imagePath);
+  const image = await loadDonutImage(imagePath);
+  return knockOutDarkBackground(image);
 }
 
 export function getPremiumDonutDataUrl(): string {

@@ -12,10 +12,9 @@ export const BRAND_NAME = 'Kasdan Co.';
 export const APP_TITLE = 'Donut Mirror';
 
 /**
- * Donut image for custom overrides.
- * By default the app renders a premium procedural donut (pink glaze, sprinkles).
- * To use your own PNG instead: set USE_PROCEDURAL_DONUT = false in
- * `src/utils/donutRenderer.ts` and replace this file.
+ * Donut image — swap this file to change the donut everywhere.
+ * `public/assets/donut.png` (currently the Kasdan Vanilla Bean artwork).
+ * Set USE_PROCEDURAL_DONUT = true in `src/utils/donutRenderer.ts` to use the built-in canvas donut instead.
  */
 export const DONUT_IMAGE_PATH = '/assets/donut.png';
 
