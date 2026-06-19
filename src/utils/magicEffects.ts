@@ -243,7 +243,7 @@ export function drawDesireText(
   ctx.font = sansFont(Math.max(10, fontSize * 0.22), 500);
   ctx.fillStyle = rgba(COLORS.creamMuted, 1);
   ctx.shadowBlur = 0;
-  ctx.fillText(BRAND_NAME.toUpperCase(), width / 2, textY + fontSize * 0.72);
+  ctx.fillText(BRAND_NAME.toUpperCase(), width / 2, textY + fontSize * 0.88);
 
   ctx.restore();
 }
