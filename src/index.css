@@ -1,0 +1,22 @@
+:root {
+  --kasdan-cream: #f5ede0;
+  --kasdan-cream-light: #faf6ef;
+  --kasdan-cream-muted: #e8dfd0;
+  --kasdan-espresso: #3e2418;
+  --kasdan-espresso-deep: #2a1810;
+  --kasdan-caramel: #c8874a;
+  --kasdan-caramel-light: #d4a574;
+  --kasdan-pink: #e8a0a8;
+  --kasdan-pink-soft: #f0c4ca;
+  --font-serif: "Cormorant Garamond", "Playfair Display", "Times New Roman", serif;
+  --font-sans: "DM Sans", "Segoe UI", system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  background: var(--kasdan-espresso-deep);
+  color: var(--kasdan-cream);
+}

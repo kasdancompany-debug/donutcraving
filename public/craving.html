@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>You found the craving — Kasdan Co.</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=DM+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --cream: #f5ede0;
+        --cream-light: #faf6ef;
+        --espresso: #3e2418;
+        --espresso-deep: #2a1810;
+        --caramel: #c8874a;
+        --caramel-light: #d4a574;
+        --pink: #e8a0a8;
+        --pink-soft: #f0c4ca;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        min-height: 100dvh;
+        font-family: "DM Sans", system-ui, sans-serif;
+        color: var(--cream);
+        background:
+          radial-gradient(ellipse 90% 70% at 50% 20%, rgba(200, 135, 74, 0.16), transparent 55%),
+          radial-gradient(ellipse 60% 50% at 80% 80%, rgba(232, 160, 168, 0.1), transparent 50%),
+          linear-gradient(165deg, #3a2218 0%, var(--espresso-deep) 45%, #140a06 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1.25rem;
+      }
+
+      .card {
+        width: min(100%, 26rem);
+        text-align: center;
+        padding: 2.5rem 1.75rem 2rem;
+        border-radius: 1.5rem;
+        background: rgba(42, 24, 16, 0.72);
+        border: 1px solid rgba(200, 135, 74, 0.2);
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(12px);
+      }
+
+      .eyebrow {
+        font-size: 0.72rem;
+        font-weight: 500;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        color: var(--caramel-light);
+        margin-bottom: 1rem;
+      }
+
+      h1 {
+        font-family: "Cormorant Garamond", serif;
+        font-size: clamp(2rem, 8vw, 2.75rem);
+        font-weight: 400;
+        font-style: italic;
+        line-height: 1.15;
+        color: var(--cream-light);
+        margin-bottom: 1.75rem;
+        text-shadow: 0 2px 32px rgba(200, 135, 74, 0.2);
+      }
+
+      .instagram-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        width: 100%;
+        padding: 0.95rem 1.25rem;
+        margin-bottom: 2rem;
+        border-radius: 999px;
+        border: none;
+        text-decoration: none;
+        font-family: inherit;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--espresso-deep);
+        background: linear-gradient(135deg, var(--caramel) 0%, var(--caramel-light) 100%);
+        box-shadow: 0 8px 28px rgba(200, 135, 74, 0.28);
+        transition: filter 0.15s ease, transform 0.15s ease;
+      }
+
+      .instagram-btn:hover {
+        filter: brightness(1.06);
+        transform: translateY(-1px);
+      }
+
+      .instagram-btn:active {
+        transform: translateY(0);
+      }
+
+      .details {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        font-size: 0.95rem;
+        line-height: 1.5;
+        color: var(--cream);
+      }
+
+      .details strong {
+        font-weight: 600;
+        color: var(--cream-light);
+      }
+
+      .address {
+        font-size: 1.05rem;
+      }
+
+      .hours {
+        color: rgba(245, 237, 224, 0.82);
+      }
+
+      .divider {
+        width: 3rem;
+        height: 1px;
+        margin: 0 auto 1.25rem;
+        background: linear-gradient(90deg, transparent, var(--pink-soft), transparent);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <p class="eyebrow">Kasdan Co.</p>
+      <h1>You found the craving.</h1>
+
+      <a
+        class="instagram-btn"
+        href="https://www.instagram.com/kasdan_co/"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Follow us @kasdan_co
+      </a>
+
+      <div class="divider" aria-hidden="true"></div>
+
+      <div class="details">
+        <p class="address"><strong>792 Queen St E.</strong></p>
+        <p class="hours">Monday to Friday · 8:00am – 3:00pm</p>
+      </div>
+    </main>
+  </body>
+</html>
