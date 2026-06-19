@@ -8,6 +8,11 @@ import { useFullscreen } from './hooks/useFullscreen';
 import { useFullscreenPrompt } from './hooks/useFullscreenPrompt';
 import { useFaceTracking } from './hooks/useFaceTracking';
 import { useHandTracking } from './hooks/useHandTracking';
+import {
+  KIOSK_IDLE_TIMEOUT_MS,
+  KIOSK_MAX_SESSION_MS,
+} from './config/branding';
+import { useKioskIdleTimeout } from './hooks/useKioskIdleTimeout';
 import { downloadCanvasScreenshot } from './utils/screenshot';
 import './App.css';
 
@@ -42,6 +47,26 @@ function App() {
   const handleRecalibrate = useCallback(() => {
     setRecalibrateToken((token) => token + 1);
   }, []);
+
+  const handleSleep = useCallback(() => {
+    setStarted(false);
+    setRecalibrateToken((token) => token + 1);
+  }, []);
+
+  const { pingActivity } = useKioskIdleTimeout({
+    enabled: started && !hasError,
+    idleTimeoutMs: KIOSK_IDLE_TIMEOUT_MS,
+    maxSessionMs: KIOSK_MAX_SESSION_MS,
+    onSleep: handleSleep,
+  });
+
+  useEffect(() => {
+    if (!started) return;
+
+    const onPointer = () => pingActivity();
+    window.addEventListener('pointerdown', onPointer);
+    return () => window.removeEventListener('pointerdown', onPointer);
+  }, [started, pingActivity]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -81,6 +106,7 @@ function App() {
           started={started}
           debugMode={debugMode}
           recalibrateToken={recalibrateToken}
+          onActivity={pingActivity}
         />
       )}
 

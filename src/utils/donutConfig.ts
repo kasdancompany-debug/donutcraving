@@ -8,7 +8,7 @@ export const DONUT_OFFSET_X = 0;
 /** Positive shifts toward fingertips along the grip axis. */
 export const DONUT_OFFSET_Y = 6;
 
-/** Multiplier on thumb↔index pinch span for donut diameter. */
+/** Multiplier on thumb↔index pinch span for donut diameter (scales with hand size). */
 export const DONUT_SCALE_MULTIPLIER = 3.1;
 
 /** Fallback scale from index MCP to thumb tip (never uses wrist). */
@@ -25,12 +25,12 @@ export const LOCK_DONUT_UPRIGHT = true;
 /** How much to blend pinch anchor toward inner palm (0 = pure pinch, 1 = inner palm). */
 export const PALM_BLEND = 0.18;
 
-/** Scale bounds as a ratio of the shorter canvas edge. */
-export const MIN_SCALE_RATIO = 0.06;
-export const MAX_SCALE_RATIO = 0.32;
+/** Scale bounds as a ratio of the shorter canvas edge (portrait/landscape safe). */
+export const MIN_SCALE_RATIO = 0.045;
+export const MAX_SCALE_RATIO = 0.34;
 
-/** Proximity threshold for idle → active transition. */
-export const PROXIMITY_SCALE_RATIO = 0.07;
+/** Proximity threshold for idle → active (lower helps smaller hands / kids). */
+export const PROXIMITY_SCALE_RATIO = 0.055;
 
 /** Position follow speed per frame at 60fps (higher = snappier). */
 export const POSITION_SMOOTHING = 0.42;

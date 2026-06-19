@@ -350,23 +350,23 @@ body,
 
 .kiosk-qr-corner {
   position: absolute;
-  bottom: 1.25rem;
-  right: 1.25rem;
+  bottom: max(0.85rem, 1.75vmin);
+  right: max(0.85rem, 1.75vmin);
   z-index: 12;
   pointer-events: none;
 }
 
 .kiosk-brand-logo {
   position: absolute;
-  bottom: 1.25rem;
-  left: 1.25rem;
+  bottom: max(0.85rem, 1.75vmin);
+  left: max(0.85rem, 1.75vmin);
   z-index: 12;
   pointer-events: none;
 }
 
 .kiosk-brand-logo img {
   display: block;
-  width: clamp(96px, 12vw, 132px);
+  width: clamp(52px, 6.5vmin, 76px);
   height: auto;
   filter: drop-shadow(0 2px 14px rgba(42, 24, 16, 0.4));
 }

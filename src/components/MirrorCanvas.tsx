@@ -64,6 +64,7 @@ interface MirrorCanvasProps {
   started: boolean;
   debugMode: boolean;
   recalibrateToken: number;
+  onActivity?: () => void;
 }
 
 function drawVideoCover(
@@ -106,6 +107,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       started,
       debugMode,
       recalibrateToken,
+      onActivity,
     },
     forwardedRef,
   ) {
@@ -120,8 +122,13 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     const cachedPoseRef = useRef<HandPose | null>(null);
     const biteStateRef = useRef<BiteDetectorState>(createBiteDetectorState());
     const explosionRef = useRef<BiteExplosion | null>(null);
+    const onActivityRef = useRef(onActivity);
 
     useImperativeHandle(forwardedRef, () => canvasRef.current as HTMLCanvasElement);
+
+    useEffect(() => {
+      onActivityRef.current = onActivity;
+    }, [onActivity]);
 
     useEffect(() => {
       transformRef.current = { ...DEFAULT_TRANSFORM };
@@ -178,12 +185,14 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         let targetTransform: DonutTransform = { ...DEFAULT_TRANSFORM };
         let mode: 'idle' | 'active' = 'idle';
         let mouthPose = null;
+        let handDetected = false;
 
         if (trackingReady) {
           const results = detect(video, timestamp);
           const hand = extractPrimaryHand(results?.landmarks ?? []);
 
           if (hand) {
+            handDetected = true;
             const pose = estimateHandPose(
               hand,
               width,
@@ -244,6 +253,14 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
             targetTransform.scale,
             timestamp,
           );
+        }
+
+        if (
+          handDetected ||
+          mode === 'active' ||
+          biteStateRef.current.phase !== 'held'
+        ) {
+          onActivityRef.current?.();
         }
 
         const targetActive = mode === 'active' ? 1 : 0;

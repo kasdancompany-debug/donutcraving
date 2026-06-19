@@ -64,3 +64,11 @@ export const SCREENSHOT_FILENAME_PREFIX = 'donut-mirror';
 
 /** Delay before the fullscreen prompt appears (milliseconds). */
 export const FULLSCREEN_PROMPT_DELAY_MS = 2500;
+
+// --- Kiosk sleep loop ---
+
+/** Return to the attract screen after this long with no hand at the mirror (ms). */
+export const KIOSK_IDLE_TIMEOUT_MS = 40_000;
+
+/** Maximum mirror session length before resetting for the next visitor (ms). */
+export const KIOSK_MAX_SESSION_MS = 90_000;
