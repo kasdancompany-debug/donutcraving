@@ -124,10 +124,9 @@ body,
 .attract-floating-donut {
   position: absolute;
   object-fit: contain;
-  opacity: 0.48;
+  opacity: 0.5;
   pointer-events: none;
-  filter: drop-shadow(0 10px 28px rgba(62, 36, 24, 0.35))
-    drop-shadow(0 0 22px rgba(232, 160, 168, 0.18));
+  filter: drop-shadow(0 8px 18px rgba(62, 36, 24, 0.28));
   animation-name: attract-float;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;

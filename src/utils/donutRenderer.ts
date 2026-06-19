@@ -360,10 +360,11 @@ export function loadDonutImage(imagePath: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Remove near-black backdrop so artwork composites on the mirror feed. */
+/** Remove near-black backdrop with soft edges, then crop empty margins. */
 export function knockOutDarkBackground(
   image: HTMLImageElement,
-  threshold = 32,
+  threshold = 50,
+  feather = 70,
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = image.naturalWidth;
@@ -373,29 +374,91 @@ export function knockOutDarkBackground(
   if (!ctx) return canvas;
 
   ctx.drawImage(image, 0, 0);
-  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
     const g = data[i + 1];
     const b = data[i + 2];
-    if (r <= threshold && g <= threshold && b <= threshold) {
+    const luminance = Math.max(r, g, b);
+
+    if (luminance <= threshold) {
       data[i + 3] = 0;
+    } else if (luminance < threshold + feather) {
+      const edge = (luminance - threshold) / feather;
+      data[i + 3] = Math.round(data[i + 3] * edge);
     }
   }
 
-  ctx.putImageData(new ImageData(data, canvas.width, canvas.height), 0, 0);
-  return canvas;
+  ctx.putImageData(new ImageData(data, width, height), 0, 0);
+  return cropCanvasToAlpha(canvas);
+}
+
+function cropCanvasToAlpha(source: HTMLCanvasElement): HTMLCanvasElement {
+  const ctx = source.getContext('2d');
+  if (!ctx) return source;
+
+  const { data, width, height } = ctx.getImageData(0, 0, source.width, source.height);
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const alpha = data[(y * width + x) * 4 + 3];
+      if (alpha > 12) {
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+  }
+
+  if (maxX <= minX || maxY <= minY) return source;
+
+  const pad = 2;
+  minX = Math.max(0, minX - pad);
+  minY = Math.max(0, minY - pad);
+  maxX = Math.min(width - 1, maxX + pad);
+  maxY = Math.min(height - 1, maxY + pad);
+
+  const cropW = maxX - minX + 1;
+  const cropH = maxY - minY + 1;
+  const cropped = document.createElement('canvas');
+  cropped.width = cropW;
+  cropped.height = cropH;
+
+  const cropCtx = cropped.getContext('2d');
+  cropCtx?.drawImage(source, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+  return cropped;
+}
+
+let cachedProcessedDonut: HTMLCanvasElement | null = null;
+
+export async function getProcessedDonutCanvas(
+  imagePath: string,
+): Promise<HTMLCanvasElement> {
+  if (USE_PROCEDURAL_DONUT) {
+    return getPremiumDonutCanvas();
+  }
+  if (!cachedProcessedDonut) {
+    const image = await loadDonutImage(imagePath);
+    cachedProcessedDonut = knockOutDarkBackground(image);
+  }
+  return cachedProcessedDonut;
+}
+
+export async function getDonutImageDataUrl(imagePath: string): Promise<string> {
+  const canvas = await getProcessedDonutCanvas(imagePath);
+  return canvas.toDataURL('image/png');
 }
 
 export async function resolveDonutDrawable(
   imagePath: string,
 ): Promise<CanvasImageSource> {
-  if (USE_PROCEDURAL_DONUT) {
-    return getPremiumDonutCanvas();
-  }
-  const image = await loadDonutImage(imagePath);
-  return knockOutDarkBackground(image);
+  return getProcessedDonutCanvas(imagePath);
 }
 
 export function getPremiumDonutDataUrl(): string {

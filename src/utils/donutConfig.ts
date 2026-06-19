@@ -14,8 +14,13 @@ export const DONUT_SCALE_MULTIPLIER = 3.1;
 /** Fallback scale from index MCP to thumb tip (never uses wrist). */
 export const DONUT_PALM_SCALE_MULTIPLIER = 2.9;
 
-/** Added to the thumb→index grip angle (radians). */
-export const DONUT_ROTATION_OFFSET = -Math.PI / 2;
+/** Added to the thumb→index grip angle (radians). Ignored when LOCK_DONUT_UPRIGHT is true. */
+export const DONUT_ROTATION_OFFSET = 0;
+
+/**
+ * Keep the donut artwork upright (top-down view). Recommended for photo/illustration assets.
+ */
+export const LOCK_DONUT_UPRIGHT = true;
 
 /** How much to blend pinch anchor toward inner palm (0 = pure pinch, 1 = inner palm). */
 export const PALM_BLEND = 0.18;

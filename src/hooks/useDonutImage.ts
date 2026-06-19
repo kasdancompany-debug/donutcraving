@@ -1,31 +1,30 @@
 import { useEffect, useState } from 'react';
 import { DONUT_IMAGE_PATH } from '../config/branding';
 import {
+  getDonutImageDataUrl,
   getPremiumDonutDataUrl,
-  loadDonutImage,
   USE_PROCEDURAL_DONUT,
 } from '../utils/donutRenderer';
 
 /** Shared donut image source for UI elements (attract screen, etc.). */
-export function useDonutImageSrc(): string {
-  const [src, setSrc] = useState(() =>
-    USE_PROCEDURAL_DONUT ? getPremiumDonutDataUrl() : DONUT_IMAGE_PATH,
-  );
+export function useDonutImageSrc(): string | null {
+  const [src, setSrc] = useState<string | null>(null);
 
   useEffect(() => {
-    if (USE_PROCEDURAL_DONUT) {
-      setSrc(getPremiumDonutDataUrl());
-      return;
-    }
-
     let cancelled = false;
-    loadDonutImage(DONUT_IMAGE_PATH)
-      .then((image) => {
-        if (!cancelled) setSrc(image.src);
-      })
-      .catch(() => {
+
+    const load = async () => {
+      try {
+        const url = USE_PROCEDURAL_DONUT
+          ? getPremiumDonutDataUrl()
+          : await getDonutImageDataUrl(DONUT_IMAGE_PATH);
+        if (!cancelled) setSrc(url);
+      } catch {
         if (!cancelled) setSrc(getPremiumDonutDataUrl());
-      });
+      }
+    };
+
+    void load();
 
     return () => {
       cancelled = true;

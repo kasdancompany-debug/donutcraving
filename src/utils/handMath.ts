@@ -5,6 +5,7 @@ import {
   DONUT_PALM_SCALE_MULTIPLIER,
   DONUT_ROTATION_OFFSET,
   DONUT_SCALE_MULTIPLIER,
+  LOCK_DONUT_UPRIGHT,
   MAX_SCALE_RATIO,
   MIN_SCALE_RATIO,
   PALM_BLEND,
@@ -211,6 +212,10 @@ function resolveRotation(
   indexTip: Point,
   thumbTip: Point,
 ): number {
+  if (LOCK_DONUT_UPRIGHT) {
+    return 0;
+  }
+
   const pinchSpan = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
 
   if (pinchSpan > 6) {

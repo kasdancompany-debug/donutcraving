@@ -7,7 +7,7 @@ import {
 } from 'react';
 import type { HandLandmarkerResult } from '@mediapipe/tasks-vision';
 import { DONUT_IMAGE_PATH } from '../config/branding';
-import { resolveDonutDrawable } from '../utils/donutRenderer';
+import { USE_PROCEDURAL_DONUT, resolveDonutDrawable } from '../utils/donutRenderer';
 import {
   createAmbientParticles,
   createSparkles,
@@ -245,7 +245,11 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           const drawWidth = drawHeight * aspect;
           const { x, y, rotation } = donut;
 
-          drawAura(ctx, x, y, drawHeight * 0.55, timestamp, activeBlend);
+          if (USE_PROCEDURAL_DONUT) {
+            drawAura(ctx, x, y, drawHeight * 0.55, timestamp, activeBlend);
+          } else {
+            drawAura(ctx, x, y, drawHeight * 0.5, timestamp, activeBlend * 0.35);
+          }
 
           ctx.save();
           ctx.globalAlpha = activeBlend;
@@ -260,27 +264,29 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           );
           ctx.restore();
 
-          drawGoldenShimmer(
-            ctx,
-            x,
-            y,
-            drawWidth,
-            drawHeight,
-            rotation,
-            timestamp,
-            activeBlend,
-          );
+          if (USE_PROCEDURAL_DONUT) {
+            drawGoldenShimmer(
+              ctx,
+              x,
+              y,
+              drawWidth,
+              drawHeight,
+              rotation,
+              timestamp,
+              activeBlend,
+            );
 
-          drawOrbitingSparkles(
-            ctx,
-            sparklesRef.current,
-            x,
-            y,
-            drawHeight * 0.55,
-            rotation,
-            timestamp,
-            activeBlend,
-          );
+            drawOrbitingSparkles(
+              ctx,
+              sparklesRef.current,
+              x,
+              y,
+              drawHeight * 0.55,
+              rotation,
+              timestamp,
+              activeBlend,
+            );
+          }
         }
 
         drawDesireText(ctx, width, height, timestamp, activeBlend);

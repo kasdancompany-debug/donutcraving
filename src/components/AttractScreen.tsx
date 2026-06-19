@@ -35,10 +35,11 @@ export function AttractScreen({ visible, onStart }: AttractScreenProps) {
     >
       <div className="attract-screen-glow" aria-hidden />
 
-      {FLOATING_DONUTS.map((donut, index) => (
-        <img
-          key={index}
-          src={donutSrc}
+      {donutSrc &&
+        FLOATING_DONUTS.map((donut, index) => (
+          <img
+            key={index}
+            src={donutSrc}
           alt=""
           aria-hidden
           className="attract-floating-donut"
