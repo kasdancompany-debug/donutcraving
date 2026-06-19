@@ -54,20 +54,22 @@ export function KioskChrome({
         </div>
       )}
 
-      <div className="kiosk-toolbar">
-        <button
-          type="button"
-          className="kiosk-btn kiosk-btn--toolbar"
-          onClick={onToggleFullscreen}
-          aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-          title="Press F"
-        >
-          {isFullscreen ? 'Exit Fullscreen' : FULLSCREEN_BUTTON_LABEL}
-          <span className="kiosk-btn-shortcut">F</span>
-        </button>
-      </div>
+      {!isFullscreen && (
+        <div className="kiosk-toolbar">
+          <button
+            type="button"
+            className="kiosk-btn kiosk-btn--toolbar"
+            onClick={onToggleFullscreen}
+            aria-label="Enter fullscreen"
+            title="Press F"
+          >
+            {FULLSCREEN_BUTTON_LABEL}
+            <span className="kiosk-btn-shortcut">F</span>
+          </button>
+        </div>
+      )}
 
-      {showKeyboardHints && (
+      {showKeyboardHints && !isFullscreen && (
         <p className="kiosk-keyboard-hints">{KEYBOARD_HINTS}</p>
       )}
 

@@ -1,24 +1,23 @@
-import { COLORS, rgba } from '../config/theme';
+import { COLORS } from '../config/theme';
 
-/** Set false in branding to use a custom PNG instead of the built-in premium donut. */
+/** Set false in branding to use a custom PNG instead of the built-in toon donut. */
 export const USE_PROCEDURAL_DONUT = true;
 
-const SPRINKLE_COLORS = [
-  COLORS.pinkGlaze,
-  COLORS.pinkGlazeSoft,
-  COLORS.caramelLight,
-  COLORS.creamLight,
-  '#ffffff',
-  COLORS.caramel,
-];
+const OUTLINE = '#2A1810';
+const OUTLINE_WIDTH_RATIO = 0.028;
 
-interface Sprinkle {
+interface Jimmi {
   x: number;
   y: number;
   w: number;
   h: number;
   rotation: number;
-  color: string;
+}
+
+interface GoldPearl {
+  x: number;
+  y: number;
+  r: number;
 }
 
 function seededRandom(seed: number) {
@@ -27,38 +26,6 @@ function seededRandom(seed: number) {
     state = (state * 16807) % 2147483647;
     return state / 2147483647;
   };
-}
-
-function createSprinkles(
-  cx: number,
-  cy: number,
-  outerR: number,
-  innerR: number,
-  count: number,
-): Sprinkle[] {
-  const rand = seededRandom(42);
-  const sprinkles: Sprinkle[] = [];
-
-  for (let i = 0; i < count; i++) {
-    const angle = rand() * Math.PI * 2;
-    const dist = innerR + (outerR - innerR) * (0.35 + rand() * 0.55);
-    const x = cx + Math.cos(angle) * dist;
-    const y = cy + Math.sin(angle) * dist;
-
-    // Keep sprinkles on the glazed top half
-    if (y > cy + outerR * 0.12) continue;
-
-    sprinkles.push({
-      x,
-      y,
-      w: outerR * (0.045 + rand() * 0.025),
-      h: outerR * (0.014 + rand() * 0.01),
-      rotation: rand() * Math.PI,
-      color: SPRINKLE_COLORS[Math.floor(rand() * SPRINKLE_COLORS.length)],
-    });
-  }
-
-  return sprinkles;
 }
 
 function clipDonutRing(
@@ -73,189 +40,277 @@ function clipDonutRing(
   ctx.arc(cx, cy, innerR, 0, Math.PI * 2, true);
 }
 
-function drawDoughBase(
+function strokeRing(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
   outerR: number,
   innerR: number,
+  lineWidth: number,
+) {
+  clipDonutRing(ctx, cx, cy, outerR, innerR);
+  ctx.lineWidth = lineWidth;
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+}
+
+function createJimmies(
+  cx: number,
+  cy: number,
+  outerR: number,
+  innerR: number,
+): Jimmi[] {
+  const rand = seededRandom(77);
+  const jimmies: Jimmi[] = [];
+
+  for (let i = 0; i < 22; i++) {
+    const angle = -Math.PI * 0.85 + rand() * Math.PI * 0.95;
+    const dist = innerR + (outerR - innerR) * (0.42 + rand() * 0.48);
+    const x = cx + Math.cos(angle) * dist;
+    const y = cy + Math.sin(angle) * dist;
+    if (y > cy + outerR * 0.08) continue;
+
+    jimmies.push({
+      x,
+      y,
+      w: outerR * (0.11 + rand() * 0.05),
+      h: outerR * (0.028 + rand() * 0.012),
+      rotation: angle + Math.PI / 2 + (rand() - 0.5) * 0.5,
+    });
+  }
+
+  return jimmies;
+}
+
+function createGoldPearls(
+  cx: number,
+  cy: number,
+  outerR: number,
+  innerR: number,
+): GoldPearl[] {
+  const rand = seededRandom(99);
+  const pearls: GoldPearl[] = [];
+
+  for (let i = 0; i < 9; i++) {
+    const angle = -Math.PI * 0.7 + rand() * Math.PI * 0.85;
+    const dist = innerR + (outerR - innerR) * (0.5 + rand() * 0.38);
+    const x = cx + Math.cos(angle) * dist;
+    const y = cy + Math.sin(angle) * dist;
+    if (y > cy + outerR * 0.05) continue;
+
+    pearls.push({
+      x,
+      y,
+      r: outerR * (0.028 + rand() * 0.014),
+    });
+  }
+
+  return pearls;
+}
+
+function drawToonShadow(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  outerR: number,
+) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(42, 24, 16, 0.28)';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + outerR * 0.88, outerR * 0.7, outerR * 0.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawToonDough(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  outerR: number,
+  innerR: number,
+  outline: number,
 ) {
   clipDonutRing(ctx, cx, cy, outerR, innerR);
 
-  const doughGrad = ctx.createRadialGradient(
-    cx - outerR * 0.25,
-    cy - outerR * 0.3,
-    innerR * 0.5,
-    cx + outerR * 0.1,
-    cy + outerR * 0.15,
-    outerR * 1.15,
-  );
-  doughGrad.addColorStop(0, '#F2D4A8');
-  doughGrad.addColorStop(0.35, '#E8B878');
-  doughGrad.addColorStop(0.65, '#C8874A');
-  doughGrad.addColorStop(1, '#8B5A2B');
+  const doughGrad = ctx.createLinearGradient(cx, cy - outerR, cx, cy + outerR);
+  doughGrad.addColorStop(0, '#F0C078');
+  doughGrad.addColorStop(0.45, '#E8A84E');
+  doughGrad.addColorStop(1, '#C47A32');
 
   ctx.fillStyle = doughGrad;
   ctx.fill();
 
-  // Fried edge crust
-  ctx.lineWidth = outerR * 0.035;
-  ctx.strokeStyle = 'rgba(107, 62, 30, 0.45)';
-  ctx.stroke();
+  // Cel-shade shadow band on lower dough
+  ctx.save();
+  clipDonutRing(ctx, cx, cy, outerR, innerR);
+  ctx.clip();
+  ctx.fillStyle = 'rgba(90, 45, 18, 0.22)';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + outerR * 0.35, outerR * 0.95, outerR * 0.45, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  strokeRing(ctx, cx, cy, outerR, innerR, outline);
 }
 
-function drawHoleDepth(
+function drawToonHole(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
   innerR: number,
+  outline: number,
 ) {
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
   const holeGrad = ctx.createRadialGradient(
-    cx,
-    cy - innerR * 0.15,
+    cx - innerR * 0.2,
+    cy - innerR * 0.25,
     innerR * 0.1,
     cx,
     cy,
-    innerR * 1.15,
+    innerR,
   );
-  holeGrad.addColorStop(0, 'rgba(20, 10, 5, 0.55)');
-  holeGrad.addColorStop(0.55, 'rgba(42, 24, 16, 0.35)');
-  holeGrad.addColorStop(1, 'rgba(62, 36, 24, 0)');
-
-  ctx.beginPath();
-  ctx.arc(cx, cy, innerR * 1.08, 0, Math.PI * 2);
+  holeGrad.addColorStop(0, '#5C3820');
+  holeGrad.addColorStop(0.7, '#3E2418');
+  holeGrad.addColorStop(1, '#2A1810');
   ctx.fillStyle = holeGrad;
   ctx.fill();
+  ctx.lineWidth = outline * 0.85;
+  ctx.strokeStyle = OUTLINE;
+  ctx.stroke();
 }
 
-function drawGlaze(
+function drawVanillaGlaze(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
   outerR: number,
   innerR: number,
+  outline: number,
 ) {
   ctx.save();
   clipDonutRing(ctx, cx, cy, outerR, innerR);
   ctx.clip();
 
-  // Main pink glaze cap on top
+  // Thick cartoon glaze cap — inspired by Kasdan Vanilla Bean
   ctx.beginPath();
-  ctx.ellipse(cx, cy - outerR * 0.18, outerR * 1.02, outerR * 0.72, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy - outerR * 0.14, outerR * 0.98, outerR * 0.62, 0, Math.PI, 0);
 
-  const glazeGrad = ctx.createRadialGradient(
-    cx - outerR * 0.15,
-    cy - outerR * 0.55,
-    outerR * 0.05,
-    cx,
-    cy - outerR * 0.1,
-    outerR * 1.05,
-  );
-  glazeGrad.addColorStop(0, rgba(COLORS.creamLight, 0.95));
-  glazeGrad.addColorStop(0.25, rgba(COLORS.pinkGlazeSoft, 0.92));
-  glazeGrad.addColorStop(0.55, rgba(COLORS.pinkGlaze, 0.88));
-  glazeGrad.addColorStop(0.85, rgba(COLORS.pinkGlaze, 0.55));
-  glazeGrad.addColorStop(1, rgba(COLORS.caramel, 0.15));
+  const glazeGrad = ctx.createLinearGradient(cx, cy - outerR, cx, cy);
+  glazeGrad.addColorStop(0, '#FFFEF9');
+  glazeGrad.addColorStop(0.35, '#F8F2E8');
+  glazeGrad.addColorStop(0.75, '#EDE4D4');
+  glazeGrad.addColorStop(1, '#E0D4C0');
 
   ctx.fillStyle = glazeGrad;
   ctx.fill();
 
-  // Icing drips
-  const drips = [
-    { x: cx - outerR * 0.38, w: outerR * 0.11, len: outerR * 0.28 },
-    { x: cx - outerR * 0.12, w: outerR * 0.09, len: outerR * 0.22 },
-    { x: cx + outerR * 0.18, w: outerR * 0.1, len: outerR * 0.26 },
-    { x: cx + outerR * 0.42, w: outerR * 0.08, len: outerR * 0.2 },
-  ];
+  // Glaze edge line
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - outerR * 0.14, outerR * 0.98, outerR * 0.62, 0, Math.PI * 0.15, Math.PI * 0.85);
+  ctx.lineWidth = outline * 0.55;
+  ctx.strokeStyle = 'rgba(42, 24, 16, 0.35)';
+  ctx.stroke();
 
-  for (const drip of drips) {
-    const top = cy + outerR * 0.02;
-    ctx.beginPath();
-    ctx.moveTo(drip.x - drip.w / 2, top);
-    ctx.bezierCurveTo(
-      drip.x - drip.w * 0.4,
-      top + drip.len * 0.45,
-      drip.x - drip.w * 0.15,
-      top + drip.len * 0.85,
-      drip.x,
-      top + drip.len,
-    );
-    ctx.bezierCurveTo(
-      drip.x + drip.w * 0.15,
-      top + drip.len * 0.85,
-      drip.x + drip.w * 0.4,
-      top + drip.len * 0.45,
-      drip.x + drip.w / 2,
-      top,
-    );
-    ctx.closePath();
-    ctx.fillStyle = rgba(COLORS.pinkGlaze, 0.9);
-    ctx.fill();
-  }
+  // One playful cartoon drip
+  const dripX = cx + outerR * 0.28;
+  const dripTop = cy + outerR * 0.04;
+  ctx.beginPath();
+  ctx.moveTo(dripX - outerR * 0.05, dripTop);
+  ctx.quadraticCurveTo(
+    dripX - outerR * 0.02,
+    dripTop + outerR * 0.18,
+    dripX,
+    dripTop + outerR * 0.24,
+  );
+  ctx.quadraticCurveTo(
+    dripX + outerR * 0.02,
+    dripTop + outerR * 0.18,
+    dripX + outerR * 0.05,
+    dripTop,
+  );
+  ctx.closePath();
+  ctx.fillStyle = '#F5F0E8';
+  ctx.fill();
+  ctx.lineWidth = outline * 0.5;
+  ctx.strokeStyle = OUTLINE;
+  ctx.stroke();
 
   ctx.restore();
 }
 
-function drawSprinkles(
+function drawJimmi(
   ctx: CanvasRenderingContext2D,
-  sprinkles: Sprinkle[],
-) {
-  for (const s of sprinkles) {
-    ctx.save();
-    ctx.translate(s.x, s.y);
-    ctx.rotate(s.rotation);
-    ctx.fillStyle = s.color;
-    ctx.shadowColor = 'rgba(0,0,0,0.15)';
-    ctx.shadowBlur = 1;
-    ctx.beginPath();
-    ctx.roundRect(-s.w / 2, -s.h / 2, s.w, s.h, s.h / 2);
-    ctx.fill();
-    ctx.restore();
-  }
-}
-
-function drawSpecularHighlight(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  outerR: number,
+  j: Jimmi,
+  outline: number,
 ) {
   ctx.save();
-  ctx.globalCompositeOperation = 'soft-light';
+  ctx.translate(j.x, j.y);
+  ctx.rotate(j.rotation);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = outline * 0.45;
+  ctx.lineJoin = 'round';
   ctx.beginPath();
-  ctx.ellipse(
-    cx - outerR * 0.22,
-    cy - outerR * 0.38,
-    outerR * 0.28,
-    outerR * 0.14,
-    -0.35,
-    0,
-    Math.PI * 2,
+  ctx.roundRect(-j.w / 2, -j.h / 2, j.w, j.h, j.h / 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawGoldPearl(
+  ctx: CanvasRenderingContext2D,
+  p: GoldPearl,
+  outline: number,
+) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+  const grad = ctx.createRadialGradient(
+    p.x - p.r * 0.3,
+    p.y - p.r * 0.35,
+    p.r * 0.1,
+    p.x,
+    p.y,
+    p.r,
   );
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+  grad.addColorStop(0, '#FFF4C2');
+  grad.addColorStop(0.45, COLORS.goldWarm);
+  grad.addColorStop(1, '#B8862E');
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.lineWidth = outline * 0.4;
+  ctx.strokeStyle = OUTLINE;
+  ctx.stroke();
+
+  // Tiny specular dot
+  ctx.beginPath();
+  ctx.arc(p.x - p.r * 0.25, p.y - p.r * 0.28, p.r * 0.22, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.fill();
   ctx.restore();
 }
 
-function drawDropShadow(
+function drawToonHighlight(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
   outerR: number,
 ) {
   ctx.save();
-  ctx.globalCompositeOperation = 'multiply';
+  clipDonutRing(ctx, cx, cy, outerR, outerR * 0.42);
+  ctx.clip();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
   ctx.beginPath();
-  ctx.ellipse(cx, cy + outerR * 0.92, outerR * 0.75, outerR * 0.12, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(62, 36, 24, 0.22)';
-  ctx.filter = 'blur(6px)';
+  ctx.ellipse(cx - outerR * 0.2, cy - outerR * 0.42, outerR * 0.22, outerR * 0.1, -0.4, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
 
 /**
- * Renders a premium Kasdan-style donut with pink glaze, drips, and sprinkles.
- * Transparent background — ready for canvas overlay compositing.
+ * Heightened toon donut — Vanilla Bean inspired:
+ * cream glaze, white jimmies, gold pearls, bold outlines.
  */
 export function renderPremiumDonut(size = 512): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
@@ -266,16 +321,25 @@ export function renderPremiumDonut(size = 512): HTMLCanvasElement {
   if (!ctx) return canvas;
 
   const cx = size / 2;
-  const cy = size / 2 - size * 0.04;
-  const outerR = size * 0.4;
-  const innerR = size * 0.165;
+  const cy = size / 2 - size * 0.03;
+  const outerR = size * 0.39;
+  const innerR = size * 0.17;
+  const outline = size * OUTLINE_WIDTH_RATIO;
 
-  drawDropShadow(ctx, cx, cy, outerR);
-  drawDoughBase(ctx, cx, cy, outerR, innerR);
-  drawHoleDepth(ctx, cx, cy, innerR);
-  drawGlaze(ctx, cx, cy, outerR, innerR);
-  drawSprinkles(ctx, createSprinkles(cx, cy, outerR, innerR, 38));
-  drawSpecularHighlight(ctx, cx, cy, outerR);
+  drawToonShadow(ctx, cx, cy, outerR);
+  drawToonDough(ctx, cx, cy, outerR, innerR, outline);
+  drawToonHole(ctx, cx, cy, innerR, outline);
+  drawVanillaGlaze(ctx, cx, cy, outerR, innerR, outline);
+
+  for (const j of createJimmies(cx, cy, outerR, innerR)) {
+    drawJimmi(ctx, j, outline);
+  }
+  for (const p of createGoldPearls(cx, cy, outerR, innerR)) {
+    drawGoldPearl(ctx, p, outline);
+  }
+
+  drawToonHighlight(ctx, cx, cy, outerR);
+  strokeRing(ctx, cx, cy, outerR, innerR, outline);
 
   return canvas;
 }
@@ -283,9 +347,7 @@ export function renderPremiumDonut(size = 512): HTMLCanvasElement {
 let cachedDonut: HTMLCanvasElement | null = null;
 
 export function getPremiumDonutCanvas(): HTMLCanvasElement {
-  if (!cachedDonut) {
-    cachedDonut = renderPremiumDonut(512);
-  }
+  cachedDonut ??= renderPremiumDonut(512);
   return cachedDonut;
 }
 
@@ -298,10 +360,6 @@ export function loadDonutImage(imagePath: string): Promise<HTMLImageElement> {
   });
 }
 
-/**
- * Returns the donut drawable — procedural premium art by default,
- * or a custom PNG from `public/assets/` when USE_PROCEDURAL_DONUT is false.
- */
 export async function resolveDonutDrawable(
   imagePath: string,
 ): Promise<CanvasImageSource> {
@@ -311,7 +369,6 @@ export async function resolveDonutDrawable(
   return loadDonutImage(imagePath);
 }
 
-/** Data URL for <img> tags (attract screen floating donuts). */
 export function getPremiumDonutDataUrl(): string {
   return getPremiumDonutCanvas().toDataURL('image/png');
 }
