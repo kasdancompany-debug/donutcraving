@@ -43,3 +43,18 @@ export const POSITION_SMOOTHING_FAST = 0.62;
 
 /** Hand speed (px/frame) that triggers faster follow. */
 export const FAST_MOVE_THRESHOLD = 18;
+
+/** Extra bite slack as a fraction of donut diameter (added to edge overlap). */
+export const BITE_DISTANCE_RATIO = 0.28;
+
+/** Consecutive frames near mouth before triggering a bite. */
+export const BITE_HOLD_FRAMES = 2;
+
+/** Minimum time between bites (ms). */
+export const BITE_COOLDOWN_MS = 1400;
+
+/** Explosion VFX duration (ms). */
+export const EXPLOSION_DURATION_MS = 750;
+
+/** Donut pop-in after explosion (ms). */
+export const RESPAWN_DURATION_MS = 450;

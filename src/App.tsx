@@ -5,6 +5,7 @@ import { MirrorCanvas } from './components/MirrorCanvas';
 import { useCamera } from './hooks/useCamera';
 import { useFullscreen } from './hooks/useFullscreen';
 import { useFullscreenPrompt } from './hooks/useFullscreenPrompt';
+import { useFaceTracking } from './hooks/useFaceTracking';
 import { useHandTracking } from './hooks/useHandTracking';
 import { downloadCanvasScreenshot } from './utils/screenshot';
 import './App.css';
@@ -19,6 +20,7 @@ function App() {
     useCamera();
   const { status: trackingStatus, error: trackingError, detect } =
     useHandTracking();
+  const { status: faceStatus, detect: detectFace } = useFaceTracking();
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 
   const isLoading =
@@ -71,7 +73,10 @@ function App() {
           ref={canvasRef}
           videoRef={videoRef}
           detect={detect}
+          detectFace={detectFace}
           trackingReady={trackingStatus === 'ready'}
+          faceReady={faceStatus === 'ready'}
+          faceStatus={faceStatus}
           started={started}
           debugMode={debugMode}
           recalibrateToken={recalibrateToken}
