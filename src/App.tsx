@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AttractScreen } from './components/AttractScreen';
+import { BrandLogo } from './components/BrandLogo';
 import { KioskChrome } from './components/KioskChrome';
 import { MirrorCanvas } from './components/MirrorCanvas';
 import { useCamera } from './hooks/useCamera';
@@ -84,6 +85,8 @@ function App() {
       )}
 
       <AttractScreen visible={showAttract} onStart={() => setStarted(true)} />
+
+      {started && !hasError && <BrandLogo />}
 
       <KioskChrome
         isFullscreen={isFullscreen}

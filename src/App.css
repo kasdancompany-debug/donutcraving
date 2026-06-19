@@ -356,6 +356,26 @@ body,
   pointer-events: none;
 }
 
+.kiosk-brand-logo {
+  position: absolute;
+  bottom: 1.25rem;
+  left: 1.25rem;
+  z-index: 12;
+  padding: 0.45rem 0.6rem;
+  border-radius: 12px;
+  background: rgba(42, 24, 16, 0.58);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(200, 135, 74, 0.2);
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(42, 24, 16, 0.28);
+}
+
+.kiosk-brand-logo img {
+  display: block;
+  width: clamp(72px, 9vw, 96px);
+  height: auto;
+}
+
 .kiosk-keyboard-hints {
   position: absolute;
   bottom: 1.25rem;

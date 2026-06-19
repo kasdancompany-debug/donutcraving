@@ -18,6 +18,9 @@ export const APP_TITLE = 'Donut Mirror';
  */
 export const DONUT_IMAGE_PATH = '/assets/donut.png';
 
+/** Kasdan logo shown in the lower-left corner. */
+export const KASDAN_LOGO_PATH = '/assets/kasdan-logo.png';
+
 /**
  * Where the mirror QR code should send people.
  * Uses your live site origin in production; works locally at /craving.html too.
