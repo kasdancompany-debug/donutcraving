@@ -110,6 +110,15 @@ export function useCamera(options: UseCameraOptions = {}) {
       video.srcObject = stream;
       video.playsInline = true;
       video.muted = true;
+
+      const track = stream.getVideoTracks()[0];
+      const onTrackEnded = () => {
+        if (sessionRef.current === session) {
+          void startCamera(true);
+        }
+      };
+      track?.addEventListener('ended', onTrackEnded);
+
       await video.play();
 
       if (session !== sessionRef.current) {
@@ -135,10 +144,36 @@ export function useCamera(options: UseCameraOptions = {}) {
   useEffect(() => {
     void startCamera(true);
 
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+
+      const track = streamRef.current?.getVideoTracks()[0];
+      const video = videoRef.current;
+
+      if (!track || track.readyState === 'ended') {
+        void startCamera(true);
+        return;
+      }
+
+      if (video && (video.videoWidth === 0 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA)) {
+        void startCamera(true);
+        return;
+      }
+
+      if (video?.paused) {
+        void video.play().catch(() => void startCamera(true));
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onVisible);
+
     return () => {
       sessionRef.current += 1;
       stopStream(streamRef.current);
       streamRef.current = null;
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onVisible);
     };
   }, [startCamera]);
 

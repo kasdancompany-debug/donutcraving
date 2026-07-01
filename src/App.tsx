@@ -82,6 +82,24 @@ function App() {
   }, [started, pingActivity]);
 
   useEffect(() => {
+    if (!isKiosk) return;
+
+    const recoverFromDisplayWake = () => {
+      if (document.visibilityState !== 'visible') return;
+      handleSleep();
+      void retry();
+    };
+
+    document.addEventListener('visibilitychange', recoverFromDisplayWake);
+    window.addEventListener('pageshow', recoverFromDisplayWake);
+
+    return () => {
+      document.removeEventListener('visibilitychange', recoverFromDisplayWake);
+      window.removeEventListener('pageshow', recoverFromDisplayWake);
+    };
+  }, [isKiosk, handleSleep, retry]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!isKiosk && (event.key === 'f' || event.key === 'F')) {
         event.preventDefault();
