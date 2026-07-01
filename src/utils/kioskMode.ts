@@ -26,12 +26,13 @@ function parseKioskProfile(): KioskProfile {
   const isLite =
     parseFlag(liteParam) || (isKiosk && liteParam !== '0');
   const allowDebug = parseFlag(params.get('debug'));
+  const biteRequested = parseFlag(params.get('bite'));
 
   return {
     isKiosk,
     isLite,
     allowDebug,
-    enableBite: !isLite,
+    enableBite: biteRequested || !isLite,
     trackIntervalMs: isLite ? 48 : 0,
     attractSubtext: isKiosk ? ATTRACT_SUBTEXT_KIOSK : ATTRACT_SUBTEXT,
   };
