@@ -44,6 +44,12 @@ import { BITE_HOLD_FRAMES } from '../utils/donutConfig';
 import { createBiteExplosion, drawBiteExplosion, type BiteExplosion } from '../utils/biteEffects';
 import { extractMouthPose } from '../utils/faceMath';
 import { drawHandDebug } from '../utils/handDebug';
+import {
+  LITE_BLEND_SMOOTHING,
+  LITE_POSE_SMOOTHING,
+  LITE_POSITION_SMOOTHING,
+  LITE_POSITION_SMOOTHING_FAST,
+} from '../config/performance';
 import { resolveMirrorMode } from '../utils/mirrorState';
 import {
   DEFAULT_TRANSFORM,
@@ -53,6 +59,12 @@ import {
 } from '../utils/smoothing';
 
 const BLEND_SMOOTHING = 0.1;
+
+export interface MirrorPerformanceOptions {
+  lite: boolean;
+  trackIntervalMs: number;
+  enableBite: boolean;
+}
 
 interface MirrorCanvasProps {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -64,6 +76,7 @@ interface MirrorCanvasProps {
   started: boolean;
   debugMode: boolean;
   recalibrateToken: number;
+  performance: MirrorPerformanceOptions;
   onActivity?: () => void;
 }
 
@@ -107,6 +120,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       started,
       debugMode,
       recalibrateToken,
+      performance,
       onActivity,
     },
     forwardedRef,
@@ -123,6 +137,16 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     const biteStateRef = useRef<BiteDetectorState>(createBiteDetectorState());
     const explosionRef = useRef<BiteExplosion | null>(null);
     const onActivityRef = useRef(onActivity);
+    const lastTrackTimeRef = useRef(0);
+    const { lite, trackIntervalMs, enableBite } = performance;
+    const blendSmoothing = lite ? LITE_BLEND_SMOOTHING : BLEND_SMOOTHING;
+    const smoothOptions = lite
+      ? {
+          poseSmoothing: LITE_POSE_SMOOTHING,
+          positionSmoothing: LITE_POSITION_SMOOTHING,
+          positionSmoothingFast: LITE_POSITION_SMOOTHING_FAST,
+        }
+      : undefined;
 
     useImperativeHandle(forwardedRef, () => canvasRef.current as HTMLCanvasElement);
 
@@ -187,7 +211,14 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         let mouthPose = null;
         let handDetected = false;
 
-        if (trackingReady) {
+        const shouldTrack =
+          trackingReady &&
+          (trackIntervalMs === 0 ||
+            timestamp - lastTrackTimeRef.current >= trackIntervalMs);
+
+        if (shouldTrack) {
+          lastTrackTimeRef.current = timestamp;
+
           const results = detect(video, timestamp);
           const hand = extractPrimaryHand(results?.landmarks ?? []);
 
@@ -215,12 +246,16 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           }
 
           cachedTargetRef.current = targetTransform;
+        } else if (trackingReady) {
+          targetTransform = cachedTargetRef.current;
+          mode = targetTransform.visible ? 'active' : 'idle';
+          handDetected = cachedPoseRef.current !== null;
         } else {
           targetTransform = cachedTargetRef.current;
           mode = targetTransform.visible ? 'active' : 'idle';
         }
 
-        if (faceReady) {
+        if (enableBite && faceReady && shouldTrack) {
           const faceResults = detectFace(video, timestamp);
           mouthPose = extractMouthPose(
             faceResults?.faceLandmarks ?? [],
@@ -232,33 +267,38 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           );
         }
 
-        const prevBitePhase = biteStateRef.current.phase;
-        biteStateRef.current = updateBiteDetector(biteStateRef.current, {
-          timestamp,
-          donutX: targetTransform.x,
-          donutY: targetTransform.y,
-          donutScale: targetTransform.scale,
-          mouth: mouthPose,
-          isActive: mode === 'active' && targetTransform.visible && targetTransform.scale > 1,
-          faceReady,
-        });
-
-        if (
-          prevBitePhase === 'held' &&
-          biteStateRef.current.phase === 'exploding'
-        ) {
-          explosionRef.current = createBiteExplosion(
-            targetTransform.x,
-            targetTransform.y,
-            targetTransform.scale,
+        if (enableBite) {
+          const prevBitePhase = biteStateRef.current.phase;
+          biteStateRef.current = updateBiteDetector(biteStateRef.current, {
             timestamp,
-          );
+            donutX: targetTransform.x,
+            donutY: targetTransform.y,
+            donutScale: targetTransform.scale,
+            mouth: mouthPose,
+            isActive:
+              mode === 'active' &&
+              targetTransform.visible &&
+              targetTransform.scale > 1,
+            faceReady,
+          });
+
+          if (
+            prevBitePhase === 'held' &&
+            biteStateRef.current.phase === 'exploding'
+          ) {
+            explosionRef.current = createBiteExplosion(
+              targetTransform.x,
+              targetTransform.y,
+              targetTransform.scale,
+              timestamp,
+            );
+          }
         }
 
         if (
           handDetected ||
           mode === 'active' ||
-          biteStateRef.current.phase !== 'held'
+          (enableBite && biteStateRef.current.phase !== 'held')
         ) {
           onActivityRef.current?.();
         }
@@ -269,18 +309,19 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         activeBlendRef.current = smoothScalar(
           activeBlendRef.current,
           targetActive,
-          BLEND_SMOOTHING,
+          blendSmoothing,
         );
         idleBlendRef.current = smoothScalar(
           idleBlendRef.current,
           targetIdle,
-          BLEND_SMOOTHING,
+          blendSmoothing,
         );
 
         transformRef.current = smoothTransform(
           transformRef.current,
           targetTransform,
-          BLEND_SMOOTHING,
+          lite ? LITE_POSE_SMOOTHING : blendSmoothing,
+          smoothOptions,
         );
 
         const activeBlend = activeBlendRef.current;
@@ -306,11 +347,24 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
 
         ctx.clearRect(0, 0, width, height);
         drawVideoCover(ctx, video, width, height, idleBlend);
-        drawBakeryLighting(ctx, width, height);
 
-        const particleBlend = Math.max(idleBlend, activeBlend * 0.35);
-        drawAmbientSparkles(ctx, ambientRef.current, width, height, timestamp, particleBlend);
-        drawIdlePulse(ctx, width, height, timestamp, idleBlend);
+        if (!lite) {
+          drawBakeryLighting(ctx, width, height);
+        }
+
+        if (!lite) {
+          const particleBlend = Math.max(idleBlend, activeBlend * 0.35);
+          drawAmbientSparkles(
+            ctx,
+            ambientRef.current,
+            width,
+            height,
+            timestamp,
+            particleBlend,
+          );
+          drawIdlePulse(ctx, width, height, timestamp, idleBlend);
+        }
+
         drawIdleVignette(ctx, width, height, idleBlend);
         drawIdleHint(ctx, width, height, timestamp, idleBlend);
 
@@ -375,7 +429,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           }
         }
 
-        if (explosionRef.current) {
+        if (enableBite && explosionRef.current) {
           const stillActive = drawBiteExplosion(
             ctx,
             explosionRef.current,
@@ -389,8 +443,11 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         }
 
         drawDesireText(ctx, width, height, timestamp, activeBlend);
-        drawCinematicVignette(ctx, width, height, 0.42);
-        drawFilmGrain(ctx, width, height, timestamp);
+        drawCinematicVignette(ctx, width, height, lite ? 0.34 : 0.42);
+
+        if (!lite) {
+          drawFilmGrain(ctx, width, height, timestamp);
+        }
 
         if (debugMode && cachedPoseRef.current) {
           drawHandDebug(ctx, cachedPoseRef.current, {
@@ -398,7 +455,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
             y: donut.y,
           });
 
-          if (mouthPose && targetTransform.scale > 1) {
+          if (enableBite && mouthPose && targetTransform.scale > 1) {
             ctx.save();
             ctx.strokeStyle = 'rgba(232, 160, 168, 0.85)';
             ctx.lineWidth = 2;
@@ -424,13 +481,19 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           ctx.textAlign = 'left';
           ctx.textBaseline = 'top';
           const biteState = biteStateRef.current;
-          const lines = [
-            `Face tracking: ${faceStatus}`,
-            `Bite phase: ${biteState.phase}`,
-            mouthPose
-              ? `Mouth lock: ${biteState.proximityFrames}/${BITE_HOLD_FRAMES} frames`
-              : 'Mouth: not detected — face the mirror',
-          ];
+          const lines = enableBite
+            ? [
+                `Face tracking: ${faceStatus}`,
+                `Bite phase: ${biteState.phase}`,
+                mouthPose
+                  ? `Mouth lock: ${biteState.proximityFrames}/${BITE_HOLD_FRAMES} frames`
+                  : 'Mouth: not detected — face the mirror',
+                lite ? 'Lite performance mode' : 'Full quality mode',
+              ]
+            : [
+                lite ? 'Lite performance mode' : 'Full quality mode',
+                `Track interval: ${trackIntervalMs || 'every frame'}ms`,
+              ];
           lines.forEach((line, index) => {
             ctx.fillText(line, 16, 16 + index * 20);
           });
@@ -455,6 +518,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       faceStatus,
       started,
       debugMode,
+      performance,
     ]);
 
     return (

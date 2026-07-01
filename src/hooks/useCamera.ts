@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { FULL_CAMERA, LITE_CAMERA } from '../config/performance';
 
 export type CameraStatus = 'idle' | 'requesting' | 'ready' | 'error';
 
 export interface CameraDimensions {
   width: number;
   height: number;
+}
+
+interface UseCameraOptions {
+  lite?: boolean;
 }
 
 function stopStream(stream: MediaStream | null) {
@@ -42,13 +47,16 @@ function friendlyCameraError(err: unknown): string {
 /** Brief pause so the OS releases the camera after the previous stream stops. */
 const RELEASE_DELAY_MS = 350;
 
-async function requestVideoStream(): Promise<MediaStream> {
+async function requestVideoStream(lite: boolean): Promise<MediaStream> {
+  const profile = lite ? LITE_CAMERA : FULL_CAMERA;
+
   try {
     return await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: 'user',
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
+        width: profile.width,
+        height: profile.height,
+        frameRate: profile.frameRate,
       },
       audio: false,
     });
@@ -57,7 +65,8 @@ async function requestVideoStream(): Promise<MediaStream> {
   }
 }
 
-export function useCamera() {
+export function useCamera(options: UseCameraOptions = {}) {
+  const lite = options.lite ?? false;
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const sessionRef = useRef(0);
@@ -84,7 +93,7 @@ export function useCamera() {
     if (session !== sessionRef.current) return;
 
     try {
-      const stream = await requestVideoStream();
+      const stream = await requestVideoStream(lite);
 
       if (session !== sessionRef.current) {
         stopStream(stream);
@@ -99,6 +108,8 @@ export function useCamera() {
 
       streamRef.current = stream;
       video.srcObject = stream;
+      video.playsInline = true;
+      video.muted = true;
       await video.play();
 
       if (session !== sessionRef.current) {
@@ -119,7 +130,7 @@ export function useCamera() {
       setError(friendlyCameraError(err));
       setStatus('error');
     }
-  }, []);
+  }, [lite]);
 
   useEffect(() => {
     void startCamera(true);

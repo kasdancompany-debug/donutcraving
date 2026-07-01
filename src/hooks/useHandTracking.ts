@@ -12,7 +12,12 @@ const MODEL_PATH =
 
 export type HandTrackingStatus = 'loading' | 'ready' | 'error';
 
-export function useHandTracking() {
+interface UseHandTrackingOptions {
+  lite?: boolean;
+}
+
+export function useHandTracking(options: UseHandTrackingOptions = {}) {
+  const lite = options.lite ?? false;
   const landmarkerRef = useRef<HandLandmarker | null>(null);
   const [status, setStatus] = useState<HandTrackingStatus>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -20,20 +25,37 @@ export function useHandTracking() {
   useEffect(() => {
     let cancelled = false;
 
+    async function createLandmarker(delegate: 'GPU' | 'CPU') {
+      const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
+      return HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: MODEL_PATH,
+          delegate,
+        },
+        runningMode: 'VIDEO',
+        numHands: 1,
+        minHandDetectionConfidence: lite ? 0.5 : 0.55,
+        minHandPresenceConfidence: lite ? 0.5 : 0.55,
+        minTrackingConfidence: lite ? 0.5 : 0.55,
+      });
+    }
+
     async function init() {
       try {
-        const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
-        const landmarker = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: MODEL_PATH,
-            delegate: 'GPU',
-          },
-          runningMode: 'VIDEO',
-          numHands: 1,
-          minHandDetectionConfidence: 0.55,
-          minHandPresenceConfidence: 0.55,
-          minTrackingConfidence: 0.55,
-        });
+        let landmarker: HandLandmarker;
+        if (lite) {
+          try {
+            landmarker = await createLandmarker('CPU');
+          } catch {
+            landmarker = await createLandmarker('GPU');
+          }
+        } else {
+          try {
+            landmarker = await createLandmarker('GPU');
+          } catch {
+            landmarker = await createLandmarker('CPU');
+          }
+        }
 
         if (cancelled) {
           landmarker.close();
@@ -60,7 +82,7 @@ export function useHandTracking() {
       landmarkerRef.current?.close();
       landmarkerRef.current = null;
     };
-  }, []);
+  }, [lite]);
 
   const detect = useCallback(
     (video: HTMLVideoElement, timestamp: number): HandLandmarkerResult | null => {

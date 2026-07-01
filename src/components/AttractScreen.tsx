@@ -9,6 +9,7 @@ import { QRCodePanel } from './QRCodePanel';
 interface AttractScreenProps {
   visible: boolean;
   onStart: () => void;
+  subtext?: string;
 }
 
 const FLOATING_DONUTS = [
@@ -21,7 +22,7 @@ const FLOATING_DONUTS = [
   { left: '22%', top: '82%', size: 68, duration: 7.5, delay: 0.9, rotate: 10 },
 ] as const;
 
-export function AttractScreen({ visible, onStart }: AttractScreenProps) {
+export function AttractScreen({ visible, onStart, subtext }: AttractScreenProps) {
   const donutSrc = useDonutImageSrc();
 
   if (!visible) return null;
@@ -58,7 +59,7 @@ export function AttractScreen({ visible, onStart }: AttractScreenProps) {
       <div className="attract-content">
         <p className="attract-eyebrow">{ATTRACT_EYEBROW}</p>
         <h1 className="attract-headline">{ATTRACT_HEADLINE}</h1>
-        <p className="attract-subtext">{ATTRACT_SUBTEXT}</p>
+        <p className="attract-subtext">{subtext ?? ATTRACT_SUBTEXT}</p>
       </div>
 
       <div className="attract-qr">

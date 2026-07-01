@@ -13,20 +13,26 @@ import {
   KIOSK_MAX_SESSION_MS,
 } from './config/branding';
 import { useKioskIdleTimeout } from './hooks/useKioskIdleTimeout';
+import { kioskProfile } from './utils/kioskMode';
 import { downloadCanvasScreenshot } from './utils/screenshot';
 import './App.css';
 
 function App() {
+  const { isKiosk, isLite, allowDebug, enableBite, trackIntervalMs, attractSubtext } =
+    kioskProfile;
+
   const [started, setStarted] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
   const [recalibrateToken, setRecalibrateToken] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const { videoRef, status: cameraStatus, error: cameraError, retry } =
-    useCamera();
+    useCamera({ lite: isLite });
   const { status: trackingStatus, error: trackingError, detect } =
-    useHandTracking();
-  const { status: faceStatus, detect: detectFace } = useFaceTracking();
+    useHandTracking({ lite: isLite });
+  const { status: faceStatus, detect: detectFace } = useFaceTracking({
+    enabled: enableBite,
+  });
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 
   const isLoading =
@@ -36,7 +42,7 @@ function App() {
 
   const hasError = cameraStatus === 'error' || trackingStatus === 'error';
   const { visible: showFullscreenPrompt, dismiss: dismissFullscreenPrompt } =
-    useFullscreenPrompt(isFullscreen, !hasError);
+    useFullscreenPrompt(isFullscreen, !hasError && !isKiosk);
   const errorMessage = cameraError ?? trackingError;
   const showAttract = !started && !hasError && !isLoading;
 
@@ -52,6 +58,13 @@ function App() {
     setStarted(false);
     setRecalibrateToken((token) => token + 1);
   }, []);
+
+  const handleStart = useCallback(() => {
+    setStarted(true);
+    if (isKiosk) {
+      void toggleFullscreen();
+    }
+  }, [isKiosk, toggleFullscreen]);
 
   const { pingActivity } = useKioskIdleTimeout({
     enabled: started && !hasError,
@@ -70,10 +83,13 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'f' || event.key === 'F') {
+      if (!isKiosk && (event.key === 'f' || event.key === 'F')) {
         event.preventDefault();
         void toggleFullscreen();
       }
+
+      if (isKiosk && !allowDebug) return;
+
       if (event.key === 'd' || event.key === 'D') {
         setDebugMode((value) => !value);
       }
@@ -87,11 +103,17 @@ function App() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [toggleFullscreen, handleRecalibrate, handleScreenshot]);
+  }, [toggleFullscreen, handleRecalibrate, handleScreenshot, isKiosk, allowDebug]);
+
+  const performance = {
+    lite: isLite,
+    trackIntervalMs,
+    enableBite,
+  };
 
   return (
-    <div className="app">
-      <div className="film-grain" aria-hidden />
+    <div className={`app${isLite ? ' app--lite' : ''}${isKiosk ? ' app--kiosk' : ''}`}>
+      {!isLite && <div className="film-grain" aria-hidden />}
       <video ref={videoRef} className="hidden-video" playsInline muted />
 
       {cameraStatus === 'ready' && (
@@ -104,29 +126,39 @@ function App() {
           faceReady={faceStatus === 'ready'}
           faceStatus={faceStatus}
           started={started}
-          debugMode={debugMode}
+          debugMode={debugMode && (allowDebug || !isKiosk)}
           recalibrateToken={recalibrateToken}
+          performance={performance}
           onActivity={pingActivity}
         />
       )}
 
-      <AttractScreen visible={showAttract} onStart={() => setStarted(true)} />
+      <AttractScreen
+        visible={showAttract}
+        onStart={handleStart}
+        subtext={attractSubtext}
+      />
 
       {started && !hasError && <BrandLogo />}
 
       <KioskChrome
+        isKiosk={isKiosk}
         isFullscreen={isFullscreen}
         onToggleFullscreen={() => void toggleFullscreen()}
         showFullscreenPrompt={showFullscreenPrompt && !hasError}
         onDismissFullscreenPrompt={dismissFullscreenPrompt}
-        showKeyboardHints={showAttract}
+        showKeyboardHints={showAttract && !isKiosk}
         showQrCorner={started && !hasError}
       />
 
       {isLoading && !hasError && (
         <div className="overlay">
           <p className="overlay-text">Awakening the mirror…</p>
-          <p className="overlay-subtext">Allow webcam access when prompted</p>
+          <p className="overlay-subtext">
+            {isKiosk
+              ? 'Getting the camera ready…'
+              : 'Allow webcam access when prompted'}
+          </p>
         </div>
       )}
 

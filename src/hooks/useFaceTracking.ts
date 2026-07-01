@@ -12,12 +12,25 @@ const MODEL_PATH =
 
 export type FaceTrackingStatus = 'loading' | 'ready' | 'error';
 
-export function useFaceTracking() {
+interface UseFaceTrackingOptions {
+  enabled?: boolean;
+}
+
+export function useFaceTracking(options: UseFaceTrackingOptions = {}) {
+  const enabled = options.enabled ?? true;
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
-  const [status, setStatus] = useState<FaceTrackingStatus>('loading');
+  const [status, setStatus] = useState<FaceTrackingStatus>(
+    enabled ? 'loading' : 'ready',
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      setStatus('ready');
+      setError(null);
+      return;
+    }
+
     let cancelled = false;
 
     async function createLandmarker(delegate: 'GPU' | 'CPU') {
@@ -69,10 +82,12 @@ export function useFaceTracking() {
       landmarkerRef.current?.close();
       landmarkerRef.current = null;
     };
-  }, []);
+  }, [enabled]);
 
   const detect = useCallback(
     (video: HTMLVideoElement, timestamp: number): FaceLandmarkerResult | null => {
+      if (!enabled) return null;
+
       const landmarker = landmarkerRef.current;
       if (!landmarker || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         return null;
@@ -80,7 +95,7 @@ export function useFaceTracking() {
 
       return landmarker.detectForVideo(video, timestamp);
     },
-    [],
+    [enabled],
   );
 
   return { status, error, detect };

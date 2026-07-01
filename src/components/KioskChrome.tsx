@@ -7,6 +7,7 @@ import {
 import { QRCodePanel } from './QRCodePanel';
 
 interface KioskChromeProps {
+  isKiosk: boolean;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
   showFullscreenPrompt: boolean;
@@ -16,6 +17,7 @@ interface KioskChromeProps {
 }
 
 export function KioskChrome({
+  isKiosk,
   isFullscreen,
   onToggleFullscreen,
   showFullscreenPrompt,
@@ -23,6 +25,14 @@ export function KioskChrome({
   showKeyboardHints,
   showQrCorner,
 }: KioskChromeProps) {
+  if (isKiosk) {
+    return showQrCorner ? (
+      <div className="kiosk-qr-corner">
+        <QRCodePanel compact />
+      </div>
+    ) : null;
+  }
+
   return (
     <>
       {showFullscreenPrompt && (

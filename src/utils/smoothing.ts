@@ -48,11 +48,25 @@ function movementSpeed(current: DonutTransform, target: DonutTransform): number 
   return Math.hypot(target.x - current.x, target.y - current.y);
 }
 
+export interface SmoothTransformOptions {
+  poseSmoothing?: number;
+  positionSmoothing?: number;
+  positionSmoothingFast?: number;
+  fastMoveThreshold?: number;
+}
+
 export function smoothTransform(
   current: DonutTransform,
   target: DonutTransform,
   fadeEasing = POSE_SMOOTHING,
+  options: SmoothTransformOptions = {},
 ): DonutTransform {
+  const poseSmoothing = options.poseSmoothing ?? POSE_SMOOTHING;
+  const positionSmoothing = options.positionSmoothing ?? POSITION_SMOOTHING;
+  const positionSmoothingFast =
+    options.positionSmoothingFast ?? POSITION_SMOOTHING_FAST;
+  const fastMoveThreshold = options.fastMoveThreshold ?? FAST_MOVE_THRESHOLD;
+
   if (!target.visible) {
     const scale = lerp(current.scale, 0, fadeEasing);
     if (scale < 4) {
@@ -67,16 +81,16 @@ export function smoothTransform(
 
   const speed = movementSpeed(current, target);
   const positionEase = lerp(
-    POSITION_SMOOTHING,
-    POSITION_SMOOTHING_FAST,
-    Math.min(1, speed / FAST_MOVE_THRESHOLD),
+    positionSmoothing,
+    positionSmoothingFast,
+    Math.min(1, speed / fastMoveThreshold),
   );
 
   return {
     x: lerp(current.x, target.x, positionEase),
     y: lerp(current.y, target.y, positionEase),
-    scale: lerp(current.scale, target.scale, POSE_SMOOTHING),
-    rotation: lerpAngle(current.rotation, target.rotation, POSE_SMOOTHING),
+    scale: lerp(current.scale, target.scale, poseSmoothing),
+    rotation: lerpAngle(current.rotation, target.rotation, poseSmoothing),
     visible: true,
   };
 }
