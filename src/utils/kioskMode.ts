@@ -1,4 +1,5 @@
 import { ATTRACT_SUBTEXT, ATTRACT_SUBTEXT_KIOSK } from '../config/branding';
+import { parseCameraRotation, type CameraRotation } from './cameraOrientation';
 
 export interface KioskProfile {
   /** Clean cafe UI — no fullscreen prompts or staff hints. */
@@ -13,6 +14,8 @@ export interface KioskProfile {
   trackIntervalMs: number;
   /** Attract screen subtext. */
   attractSubtext: string;
+  /** Rotate USB webcam feed for portrait kiosk (?camRotate=90|270|180|auto). */
+  camRotate: CameraRotation;
 }
 
 function parseFlag(value: string | null): boolean {
@@ -35,6 +38,7 @@ function parseKioskProfile(): KioskProfile {
     enableBite: biteRequested || !isLite,
     trackIntervalMs: isLite ? 48 : 0,
     attractSubtext: isKiosk ? ATTRACT_SUBTEXT_KIOSK : ATTRACT_SUBTEXT,
+    camRotate: parseCameraRotation(isKiosk),
   };
 }
 

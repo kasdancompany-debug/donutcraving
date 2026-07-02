@@ -10,6 +10,8 @@ const WASM_PATH =
 const MODEL_PATH =
   'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
+import type { VisionFrameSource } from '../utils/cameraOrientation';
+
 export type HandTrackingStatus = 'loading' | 'ready' | 'error';
 
 interface UseHandTrackingOptions {
@@ -85,13 +87,14 @@ export function useHandTracking(options: UseHandTrackingOptions = {}) {
   }, [lite]);
 
   const detect = useCallback(
-    (video: HTMLVideoElement, timestamp: number): HandLandmarkerResult | null => {
+    (source: VisionFrameSource, timestamp: number): HandLandmarkerResult | null => {
       const landmarker = landmarkerRef.current;
-      if (!landmarker || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      if (!landmarker) return null;
+      if (source instanceof HTMLVideoElement && source.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         return null;
       }
 
-      return landmarker.detectForVideo(video, timestamp);
+      return landmarker.detectForVideo(source, timestamp);
     },
     [],
   );

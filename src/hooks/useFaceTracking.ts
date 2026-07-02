@@ -10,6 +10,8 @@ const WASM_PATH =
 const MODEL_PATH =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
+import type { VisionFrameSource } from '../utils/cameraOrientation';
+
 export type FaceTrackingStatus = 'loading' | 'ready' | 'error';
 
 interface UseFaceTrackingOptions {
@@ -85,15 +87,16 @@ export function useFaceTracking(options: UseFaceTrackingOptions = {}) {
   }, [enabled]);
 
   const detect = useCallback(
-    (video: HTMLVideoElement, timestamp: number): FaceLandmarkerResult | null => {
+    (source: VisionFrameSource, timestamp: number): FaceLandmarkerResult | null => {
       if (!enabled) return null;
 
       const landmarker = landmarkerRef.current;
-      if (!landmarker || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      if (!landmarker) return null;
+      if (source instanceof HTMLVideoElement && source.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         return null;
       }
 
-      return landmarker.detectForVideo(video, timestamp);
+      return landmarker.detectForVideo(source, timestamp);
     },
     [enabled],
   );

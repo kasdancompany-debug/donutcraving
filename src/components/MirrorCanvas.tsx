@@ -45,6 +45,11 @@ import { createBiteExplosion, drawBiteExplosion, type BiteExplosion } from '../u
 import { extractMouthPose } from '../utils/faceMath';
 import { drawHandDebug } from '../utils/handDebug';
 import {
+  renderCorrectedVideoFrame,
+  type CameraRotation,
+  type VisionFrameSource,
+} from '../utils/cameraOrientation';
+import {
   LITE_BLEND_SMOOTHING,
   LITE_POSE_SMOOTHING,
   LITE_POSITION_SMOOTHING,
@@ -68,8 +73,8 @@ export interface MirrorPerformanceOptions {
 
 interface MirrorCanvasProps {
   videoRef: RefObject<HTMLVideoElement | null>;
-  detect: (video: HTMLVideoElement, timestamp: number) => HandLandmarkerResult | null;
-  detectFace: (video: HTMLVideoElement, timestamp: number) => FaceLandmarkerResult | null;
+  detect: (source: VisionFrameSource, timestamp: number) => HandLandmarkerResult | null;
+  detectFace: (source: VisionFrameSource, timestamp: number) => FaceLandmarkerResult | null;
   trackingReady: boolean;
   faceReady: boolean;
   faceStatus: 'loading' | 'ready' | 'error';
@@ -77,33 +82,39 @@ interface MirrorCanvasProps {
   debugMode: boolean;
   recalibrateToken: number;
   performance: MirrorPerformanceOptions;
+  camRotate: CameraRotation;
   onActivity?: () => void;
 }
 
 function drawVideoCover(
   ctx: CanvasRenderingContext2D,
-  video: HTMLVideoElement,
-  width: number,
-  height: number,
+  source: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  canvasWidth: number,
+  canvasHeight: number,
   dimAmount: number,
+  mirror: boolean,
 ) {
   const { offsetX, offsetY, drawWidth, drawHeight } = getVideoCoverRect(
-    video.videoWidth,
-    video.videoHeight,
-    width,
-    height,
+    sourceWidth,
+    sourceHeight,
+    canvasWidth,
+    canvasHeight,
   );
 
   ctx.save();
-  ctx.translate(width, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
+  if (mirror) {
+    ctx.translate(canvasWidth, 0);
+    ctx.scale(-1, 1);
+  }
+  ctx.drawImage(source, offsetX, offsetY, drawWidth, drawHeight);
   ctx.restore();
 
   if (dimAmount > 0.01) {
     ctx.save();
     ctx.fillStyle = `rgba(42, 24, 16, ${dimAmount * 0.38})`;
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
     ctx.restore();
   }
 }
@@ -121,6 +132,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       debugMode,
       recalibrateToken,
       performance,
+      camRotate,
       onActivity,
     },
     forwardedRef,
@@ -138,6 +150,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     const explosionRef = useRef<BiteExplosion | null>(null);
     const onActivityRef = useRef(onActivity);
     const lastTrackTimeRef = useRef(0);
+    const processingCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const { lite, trackIntervalMs, enableBite } = performance;
     const blendSmoothing = lite ? LITE_BLEND_SMOOTHING : BLEND_SMOOTHING;
     const smoothOptions = lite
@@ -206,6 +219,31 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           return;
         }
 
+        let frameSource: VisionFrameSource = video;
+        let frameWidth = video.videoWidth;
+        let frameHeight = video.videoHeight;
+        let mirrorLandmarks = true;
+        let mirrorCover = true;
+
+        if (camRotate !== 0) {
+          if (!processingCanvasRef.current) {
+            processingCanvasRef.current = document.createElement('canvas');
+          }
+          const corrected = renderCorrectedVideoFrame(
+            processingCanvasRef.current,
+            video,
+            camRotate,
+            true,
+          );
+          if (corrected.width > 0 && corrected.height > 0) {
+            frameSource = processingCanvasRef.current;
+            frameWidth = corrected.width;
+            frameHeight = corrected.height;
+            mirrorLandmarks = false;
+            mirrorCover = false;
+          }
+        }
+
         let targetTransform: DonutTransform = { ...DEFAULT_TRANSFORM };
         let mode: 'idle' | 'active' = 'idle';
         let mouthPose = null;
@@ -219,7 +257,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         if (shouldTrack) {
           lastTrackTimeRef.current = timestamp;
 
-          const results = detect(video, timestamp);
+          const results = detect(frameSource, timestamp);
           const hand = extractPrimaryHand(results?.landmarks ?? []);
 
           if (hand) {
@@ -228,9 +266,9 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
               hand,
               width,
               height,
-              video.videoWidth,
-              video.videoHeight,
-              true,
+              frameWidth,
+              frameHeight,
+              mirrorLandmarks,
             );
             cachedPoseRef.current = pose;
             mode = resolveMirrorMode(hand, pose, width, height);
@@ -256,14 +294,14 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         }
 
         if (enableBite && faceReady && shouldTrack) {
-          const faceResults = detectFace(video, timestamp);
+          const faceResults = detectFace(frameSource, timestamp);
           mouthPose = extractMouthPose(
             faceResults?.faceLandmarks ?? [],
             width,
             height,
-            video.videoWidth,
-            video.videoHeight,
-            true,
+            frameWidth,
+            frameHeight,
+            mirrorLandmarks,
           );
         }
 
@@ -346,7 +384,16 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
               : 0;
 
         ctx.clearRect(0, 0, width, height);
-        drawVideoCover(ctx, video, width, height, idleBlend);
+        drawVideoCover(
+          ctx,
+          frameSource,
+          frameWidth,
+          frameHeight,
+          width,
+          height,
+          idleBlend,
+          mirrorCover,
+        );
 
         if (!lite) {
           drawBakeryLighting(ctx, width, height);
@@ -493,6 +540,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
             : [
                 lite ? 'Lite performance mode' : 'Full quality mode',
                 `Track interval: ${trackIntervalMs || 'every frame'}ms`,
+                `Camera rotate: ${camRotate}°`,
               ];
           lines.forEach((line, index) => {
             ctx.fillText(line, 16, 16 + index * 20);
@@ -519,6 +567,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       started,
       debugMode,
       performance,
+      camRotate,
     ]);
 
     return (

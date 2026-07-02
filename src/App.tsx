@@ -18,7 +18,7 @@ import { downloadCanvasScreenshot } from './utils/screenshot';
 import './App.css';
 
 function App() {
-  const { isKiosk, isLite, allowDebug, enableBite, trackIntervalMs, attractSubtext } =
+  const { isKiosk, isLite, allowDebug, enableBite, trackIntervalMs, attractSubtext, camRotate } =
     kioskProfile;
 
   const [started, setStarted] = useState(false);
@@ -147,6 +147,7 @@ function App() {
           debugMode={debugMode && (allowDebug || !isKiosk)}
           recalibrateToken={recalibrateToken}
           performance={performance}
+          camRotate={camRotate}
           onActivity={pingActivity}
         />
       )}
