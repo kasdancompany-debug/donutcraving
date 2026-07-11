@@ -163,33 +163,33 @@ body,
 .attract-eyebrow {
   font-family: var(--font-sans);
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.32em;
   text-transform: uppercase;
-  color: var(--kasdan-text-secondary);
-  text-shadow: var(--kasdan-text-halo);
+  color: var(--kasdan-caramel-light);
   animation: attract-shimmer 5s ease-in-out infinite;
 }
 
 .attract-headline {
   font-family: var(--font-serif);
   font-size: clamp(2.4rem, 7.5vw, 4.5rem);
-  font-weight: 600;
+  font-weight: 400;
   font-style: italic;
   line-height: 1.08;
   letter-spacing: -0.01em;
-  color: var(--kasdan-text-primary);
-  text-shadow: var(--kasdan-text-halo);
+  color: var(--kasdan-cream-light);
+  text-shadow:
+    0 2px 40px rgba(200, 135, 74, 0.25),
+    0 0 80px rgba(232, 160, 168, 0.12);
   animation: attract-headline-float 6s ease-in-out infinite;
 }
 
 .attract-subtext {
   font-family: var(--font-sans);
   font-size: 0.92rem;
-  font-weight: 500;
+  font-weight: 400;
   letter-spacing: 0.06em;
-  color: var(--kasdan-text-muted);
-  text-shadow: var(--kasdan-text-halo);
+  color: var(--kasdan-cream-muted);
   animation: hint-pulse 2.8s ease-in-out infinite;
 }
 
@@ -342,14 +342,19 @@ body,
 .qr-panel-label {
   font-family: var(--font-sans);
   font-size: 0.68rem;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--kasdan-text-primary);
-  text-shadow: var(--kasdan-text-halo);
+  color: var(--kasdan-cream-muted);
   text-align: center;
   max-width: 140px;
   line-height: 1.35;
+}
+
+.kiosk-qr-corner .qr-panel-label {
+  font-weight: 600;
+  color: var(--kasdan-text-primary);
+  text-shadow: var(--kasdan-text-halo);
 }
 
 .qr-panel--compact .qr-panel-label {
@@ -397,8 +402,7 @@ body,
   font-family: var(--font-sans);
   font-size: 0.68rem;
   letter-spacing: 0.04em;
-  color: var(--kasdan-text-muted);
-  text-shadow: var(--kasdan-text-halo);
+  color: rgba(232, 223, 208, 0.38);
   max-width: 22rem;
   line-height: 1.55;
   pointer-events: none;
