@@ -14,6 +14,10 @@ export const COLORS = {
   pinkGlaze: '#E8A0A8',
   pinkGlazeSoft: '#F0C4CA',
   goldWarm: '#DDB878',
+  /** High-contrast copy for bright environments / live video. */
+  textPrimary: '#2A1810',
+  textSecondary: '#3E2418',
+  textMuted: '#5A3D2E',
 } as const;
 
 /** Elegant serif for cinematic headlines. */

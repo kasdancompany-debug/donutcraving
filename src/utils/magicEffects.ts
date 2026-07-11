@@ -221,9 +221,9 @@ export function drawDesireText(
   const text = DESIRE_TEXT;
   const textY = height * 0.11;
 
-  ctx.shadowColor = rgba(COLORS.pinkGlaze, 0.35 * alpha);
-  ctx.shadowBlur = 28;
-  ctx.shadowOffsetY = 2;
+  ctx.shadowColor = rgba(COLORS.creamLight, 0.92 * alpha);
+  ctx.shadowBlur = 16;
+  ctx.shadowOffsetY = 0;
 
   const grad = ctx.createLinearGradient(
     width * 0.22,
@@ -231,18 +231,17 @@ export function drawDesireText(
     width * 0.78,
     textY + fontSize * 0.5,
   );
-  grad.addColorStop(0, rgba(COLORS.caramelLight, alpha));
-  grad.addColorStop(0.35, rgba(COLORS.creamLight, alpha));
-  grad.addColorStop(0.65, rgba(COLORS.cream, alpha));
-  grad.addColorStop(1, rgba(COLORS.pinkGlazeSoft, alpha * 0.9));
+  grad.addColorStop(0, rgba(COLORS.textPrimary, alpha));
+  grad.addColorStop(0.5, rgba(COLORS.textSecondary, alpha));
+  grad.addColorStop(1, rgba(COLORS.textPrimary, alpha * 0.95));
 
   ctx.fillStyle = grad;
   ctx.fillText(text, width / 2, textY);
 
-  ctx.globalAlpha = alpha * 0.35;
-  ctx.font = sansFont(Math.max(10, fontSize * 0.22), 500);
-  ctx.fillStyle = rgba(COLORS.creamMuted, 1);
-  ctx.shadowBlur = 0;
+  ctx.globalAlpha = alpha * 0.82;
+  ctx.font = sansFont(Math.max(10, fontSize * 0.22), 600);
+  ctx.fillStyle = rgba(COLORS.textMuted, 1);
+  ctx.shadowBlur = 10;
   ctx.fillText(BRAND_NAME.toUpperCase(), width / 2, textY + fontSize * 0.88);
 
   ctx.restore();
@@ -334,10 +333,10 @@ export function drawIdleHint(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const fontSize = Math.max(18, Math.min(width * 0.032, 38));
-  ctx.font = serifFont(fontSize, 400, true);
-  ctx.fillStyle = rgba(COLORS.creamMuted, 0.62 * blend * pulse);
-  ctx.shadowColor = rgba(COLORS.pinkGlaze, 0.25 * blend);
-  ctx.shadowBlur = 16;
+  ctx.font = serifFont(fontSize, 500, true);
+  ctx.fillStyle = rgba(COLORS.textPrimary, 0.9 * blend * pulse);
+  ctx.shadowColor = rgba(COLORS.creamLight, 0.92 * blend);
+  ctx.shadowBlur = 14;
   ctx.fillText(text, width / 2, height * 0.87);
   ctx.restore();
 }

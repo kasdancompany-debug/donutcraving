@@ -161,9 +161,9 @@ export function drawBiteExplosion(
     const textAlpha = (1 - progress / 0.45) * 0.95;
     ctx.save();
     ctx.globalAlpha = textAlpha;
-    ctx.fillStyle = COLORS.creamLight;
-    ctx.strokeStyle = rgba(COLORS.espresso, 0.35);
-    ctx.lineWidth = 2;
+    ctx.fillStyle = COLORS.textPrimary;
+    ctx.strokeStyle = rgba(COLORS.creamLight, 0.9);
+    ctx.lineWidth = 3;
     ctx.font = sansFont(scale * 0.14, 700);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
