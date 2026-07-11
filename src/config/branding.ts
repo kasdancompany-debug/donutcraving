@@ -41,6 +41,7 @@ export const ATTRACT_EYEBROW = APP_TITLE;
 export const ATTRACT_HEADLINE = 'Step closer to reveal your craving';
 export const ATTRACT_SUBTEXT = 'Tap anywhere to begin';
 export const ATTRACT_SUBTEXT_KIOSK = 'Touch to begin';
+export const ATTRACT_SUBTEXT_WAVE = 'Wave your hand to begin';
 
 // --- In-experience copy (drawn on canvas) ---
 

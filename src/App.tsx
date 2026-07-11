@@ -18,7 +18,7 @@ import { downloadCanvasScreenshot } from './utils/screenshot';
 import './App.css';
 
 function App() {
-  const { isKiosk, isLite, allowDebug, enableBite, trackIntervalMs, attractSubtext, camRotate } =
+  const { isKiosk, isLite, allowDebug, enableBite, trackIntervalMs, attractSubtext, camRotate, waveToStart } =
     kioskProfile;
 
   const [started, setStarted] = useState(false);
@@ -56,6 +56,7 @@ function App() {
 
   const handleSleep = useCallback(() => {
     setStarted(false);
+    setDebugMode(false);
     setRecalibrateToken((token) => token + 1);
   }, []);
 
@@ -74,12 +75,18 @@ function App() {
   });
 
   useEffect(() => {
-    if (!started) return;
+    if (!allowDebug) {
+      setDebugMode(false);
+    }
+  }, [allowDebug]);
+
+  useEffect(() => {
+    if (!started || waveToStart) return;
 
     const onPointer = () => pingActivity();
     window.addEventListener('pointerdown', onPointer);
     return () => window.removeEventListener('pointerdown', onPointer);
-  }, [started, pingActivity]);
+  }, [started, pingActivity, waveToStart]);
 
   useEffect(() => {
     if (!isKiosk) return;
@@ -106,7 +113,7 @@ function App() {
         void toggleFullscreen();
       }
 
-      if (isKiosk && !allowDebug) return;
+      if (!allowDebug) return;
 
       if (event.key === 'd' || event.key === 'D') {
         setDebugMode((value) => !value);
@@ -144,10 +151,12 @@ function App() {
           faceReady={faceStatus === 'ready'}
           faceStatus={faceStatus}
           started={started}
-          debugMode={debugMode && (allowDebug || !isKiosk)}
+          debugMode={allowDebug && debugMode}
           recalibrateToken={recalibrateToken}
           performance={performance}
           camRotate={camRotate}
+          waveToStart={waveToStart}
+          onWaveStart={handleStart}
           onActivity={pingActivity}
         />
       )}
@@ -156,6 +165,7 @@ function App() {
         visible={showAttract}
         onStart={handleStart}
         subtext={attractSubtext}
+        waveMode={waveToStart}
       />
 
       {started && !hasError && <BrandLogo />}

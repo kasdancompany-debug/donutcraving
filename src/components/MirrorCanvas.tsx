@@ -40,7 +40,7 @@ import {
   type BiteDetectorState,
 } from '../utils/biteDetection';
 import { sansFont } from '../config/theme';
-import { BITE_HOLD_FRAMES } from '../utils/donutConfig';
+import { BITE_HOLD_FRAMES, WAVE_HOLD_FRAMES } from '../utils/donutConfig';
 import { createBiteExplosion, drawBiteExplosion, type BiteExplosion } from '../utils/biteEffects';
 import { extractMouthPose } from '../utils/faceMath';
 import { drawHandDebug } from '../utils/handDebug';
@@ -83,6 +83,8 @@ interface MirrorCanvasProps {
   recalibrateToken: number;
   performance: MirrorPerformanceOptions;
   camRotate: CameraRotation;
+  waveToStart?: boolean;
+  onWaveStart?: () => void;
   onActivity?: () => void;
 }
 
@@ -133,6 +135,8 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       recalibrateToken,
       performance,
       camRotate,
+      waveToStart = false,
+      onWaveStart,
       onActivity,
     },
     forwardedRef,
@@ -149,7 +153,9 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     const biteStateRef = useRef<BiteDetectorState>(createBiteDetectorState());
     const explosionRef = useRef<BiteExplosion | null>(null);
     const onActivityRef = useRef(onActivity);
+    const onWaveStartRef = useRef(onWaveStart);
     const lastTrackTimeRef = useRef(0);
+    const waveFramesRef = useRef(0);
     const processingCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const { lite, trackIntervalMs, enableBite } = performance;
     const blendSmoothing = lite ? LITE_BLEND_SMOOTHING : BLEND_SMOOTHING;
@@ -168,6 +174,10 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     }, [onActivity]);
 
     useEffect(() => {
+      onWaveStartRef.current = onWaveStart;
+    }, [onWaveStart]);
+
+    useEffect(() => {
       transformRef.current = { ...DEFAULT_TRANSFORM };
       activeBlendRef.current = 0;
       idleBlendRef.current = 1;
@@ -175,6 +185,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       cachedPoseRef.current = null;
       biteStateRef.current = createBiteDetectorState();
       explosionRef.current = null;
+      waveFramesRef.current = 0;
     }, [recalibrateToken]);
 
     useEffect(() => {
@@ -214,7 +225,13 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         const width = canvas.width;
         const height = canvas.height;
 
-        if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !started) {
+        if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+          frameId = requestAnimationFrame(draw);
+          return;
+        }
+
+        const previewMode = waveToStart && !started;
+        if (!started && !previewMode) {
           frameId = requestAnimationFrame(draw);
           return;
         }
@@ -244,15 +261,48 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           }
         }
 
-        let targetTransform: DonutTransform = { ...DEFAULT_TRANSFORM };
-        let mode: 'idle' | 'active' = 'idle';
-        let mouthPose = null;
-        let handDetected = false;
-
         const shouldTrack =
           trackingReady &&
           (trackIntervalMs === 0 ||
             timestamp - lastTrackTimeRef.current >= trackIntervalMs);
+
+        if (previewMode) {
+          if (shouldTrack) {
+            lastTrackTimeRef.current = timestamp;
+            const results = detect(frameSource, timestamp);
+            const hand = extractPrimaryHand(results?.landmarks ?? []);
+            if (hand) {
+              waveFramesRef.current += 1;
+              if (waveFramesRef.current >= WAVE_HOLD_FRAMES) {
+                waveFramesRef.current = 0;
+                onWaveStartRef.current?.();
+              }
+            } else {
+              waveFramesRef.current = 0;
+            }
+          }
+
+          ctx.clearRect(0, 0, width, height);
+          drawVideoCover(
+            ctx,
+            frameSource,
+            frameWidth,
+            frameHeight,
+            width,
+            height,
+            0.28,
+            mirrorCover,
+          );
+          drawIdleVignette(ctx, width, height, 0.75);
+          drawCinematicVignette(ctx, width, height, 0.38);
+          frameId = requestAnimationFrame(draw);
+          return;
+        }
+
+        let targetTransform: DonutTransform = { ...DEFAULT_TRANSFORM };
+        let mode: 'idle' | 'active' = 'idle';
+        let mouthPose = null;
+        let handDetected = false;
 
         if (shouldTrack) {
           lastTrackTimeRef.current = timestamp;
@@ -568,6 +618,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       debugMode,
       performance,
       camRotate,
+      waveToStart,
     ]);
 
     return (

@@ -106,6 +106,23 @@ body,
   pointer-events: none;
 }
 
+.attract-screen--wave {
+  cursor: default;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 45%, rgba(200, 135, 74, 0.1) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 20% 80%, rgba(232, 160, 168, 0.06) 0%, transparent 50%),
+    linear-gradient(180deg, rgba(42, 24, 16, 0.42) 0%, rgba(42, 24, 16, 0.62) 100%);
+}
+
+.attract-screen--wave::after {
+  background: radial-gradient(
+    ellipse at center,
+    transparent 35%,
+    rgba(26, 14, 8, 0.35) 100%
+  );
+}
+
 .attract-screen-glow {
   position: absolute;
   width: min(75vw, 520px);

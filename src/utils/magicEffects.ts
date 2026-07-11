@@ -325,6 +325,7 @@ export function drawIdleHint(
   height: number,
   time: number,
   blend: number,
+  text = IDLE_HINT_TEXT,
 ) {
   if (blend <= 0.02) return;
 
@@ -337,6 +338,6 @@ export function drawIdleHint(
   ctx.fillStyle = rgba(COLORS.creamMuted, 0.62 * blend * pulse);
   ctx.shadowColor = rgba(COLORS.pinkGlaze, 0.25 * blend);
   ctx.shadowBlur = 16;
-  ctx.fillText(IDLE_HINT_TEXT, width / 2, height * 0.87);
+  ctx.fillText(text, width / 2, height * 0.87);
   ctx.restore();
 }

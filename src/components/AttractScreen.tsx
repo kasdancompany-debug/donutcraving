@@ -10,6 +10,7 @@ interface AttractScreenProps {
   visible: boolean;
   onStart: () => void;
   subtext?: string;
+  waveMode?: boolean;
 }
 
 const FLOATING_DONUTS = [
@@ -22,18 +23,13 @@ const FLOATING_DONUTS = [
   { left: '22%', top: '82%', size: 68, duration: 7.5, delay: 0.9, rotate: 10 },
 ] as const;
 
-export function AttractScreen({ visible, onStart, subtext }: AttractScreenProps) {
+export function AttractScreen({ visible, onStart, subtext, waveMode = false }: AttractScreenProps) {
   const donutSrc = useDonutImageSrc();
 
   if (!visible) return null;
 
-  return (
-    <button
-      type="button"
-      className="attract-screen"
-      onClick={onStart}
-      aria-label="Begin the desire mirror experience"
-    >
+  const content = (
+    <>
       <div className="attract-screen-glow" aria-hidden />
 
       {donutSrc &&
@@ -41,20 +37,20 @@ export function AttractScreen({ visible, onStart, subtext }: AttractScreenProps)
           <img
             key={index}
             src={donutSrc}
-          alt=""
-          aria-hidden
-          className="attract-floating-donut"
-          style={{
-            left: donut.left,
-            top: donut.top,
-            width: donut.size,
-            height: donut.size,
-            animationDuration: `${donut.duration}s`,
-            animationDelay: `${donut.delay}s`,
-            transform: `rotate(${donut.rotate}deg)`,
-          }}
-        />
-      ))}
+            alt=""
+            aria-hidden
+            className="attract-floating-donut"
+            style={{
+              left: donut.left,
+              top: donut.top,
+              width: donut.size,
+              height: donut.size,
+              animationDuration: `${donut.duration}s`,
+              animationDelay: `${donut.delay}s`,
+              transform: `rotate(${donut.rotate}deg)`,
+            }}
+          />
+        ))}
 
       <div className="attract-content">
         <p className="attract-eyebrow">{ATTRACT_EYEBROW}</p>
@@ -65,6 +61,25 @@ export function AttractScreen({ visible, onStart, subtext }: AttractScreenProps)
       <div className="attract-qr">
         <QRCodePanel compact />
       </div>
+    </>
+  );
+
+  if (waveMode) {
+    return (
+      <div className="attract-screen attract-screen--wave" aria-label="Wave to begin">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="attract-screen"
+      onClick={onStart}
+      aria-label="Begin the desire mirror experience"
+    >
+      {content}
     </button>
   );
 }

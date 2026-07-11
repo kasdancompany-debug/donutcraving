@@ -56,5 +56,8 @@ export const BITE_COOLDOWN_MS = 1400;
 /** Explosion VFX duration (ms). */
 export const EXPLOSION_DURATION_MS = 750;
 
+/** Consecutive frames with a visible hand before auto-starting (wave to begin). */
+export const WAVE_HOLD_FRAMES = 10;
+
 /** Donut pop-in after explosion (ms). */
 export const RESPAWN_DURATION_MS = 450;
