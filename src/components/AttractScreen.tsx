@@ -2,6 +2,7 @@ import {
   ATTRACT_EYEBROW,
   ATTRACT_HEADLINE,
   ATTRACT_SUBTEXT,
+  ATTRACT_SUBTEXT_WAVE,
 } from '../config/branding';
 import { useDonutImageSrc } from '../hooks/useDonutImage';
 import { QRCodePanel } from './QRCodePanel';
@@ -55,7 +56,9 @@ export function AttractScreen({ visible, onStart, subtext, waveMode = false }: A
       <div className="attract-content">
         <p className="attract-eyebrow">{ATTRACT_EYEBROW}</p>
         <h1 className="attract-headline">{ATTRACT_HEADLINE}</h1>
-        <p className="attract-subtext">{subtext ?? ATTRACT_SUBTEXT}</p>
+        <p className="attract-subtext">
+          {subtext ?? (waveMode ? ATTRACT_SUBTEXT_WAVE : ATTRACT_SUBTEXT)}
+        </p>
       </div>
 
       <div className="attract-qr">

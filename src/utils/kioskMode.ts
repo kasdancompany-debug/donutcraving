@@ -1,4 +1,4 @@
-import { ATTRACT_SUBTEXT } from '../config/branding';
+import { ATTRACT_SUBTEXT, ATTRACT_SUBTEXT_KIOSK, ATTRACT_SUBTEXT_WAVE } from '../config/branding';
 import { parseCameraRotation, type CameraRotation } from './cameraOrientation';
 
 export interface KioskProfile {
@@ -33,7 +33,7 @@ function parseKioskProfile(): KioskProfile {
   const allowDebug = parseFlag(params.get('debug'));
   const biteRequested = parseFlag(params.get('bite'));
   const touchStart = parseFlag(params.get('touch'));
-  const waveToStart = isKiosk && !touchStart;
+  const waveToStart = !touchStart;
 
   return {
     isKiosk,
@@ -41,7 +41,11 @@ function parseKioskProfile(): KioskProfile {
     allowDebug,
     enableBite: biteRequested || !isLite,
     trackIntervalMs: isLite ? 48 : 0,
-    attractSubtext: ATTRACT_SUBTEXT,
+    attractSubtext: waveToStart
+      ? ATTRACT_SUBTEXT_WAVE
+      : isKiosk
+        ? ATTRACT_SUBTEXT_KIOSK
+        : ATTRACT_SUBTEXT,
     waveToStart,
     camRotate: parseCameraRotation(isKiosk),
   };

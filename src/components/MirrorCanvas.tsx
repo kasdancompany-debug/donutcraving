@@ -40,7 +40,13 @@ import {
   type BiteDetectorState,
 } from '../utils/biteDetection';
 import { sansFont } from '../config/theme';
-import { BITE_HOLD_FRAMES, WAVE_HOLD_FRAMES } from '../utils/donutConfig';
+import { BITE_HOLD_FRAMES } from '../utils/donutConfig';
+import {
+  createWaveDetectorState,
+  resetWaveDetector,
+  updateWaveDetector,
+  type WaveDetectorState,
+} from '../utils/waveDetection';
 import { createBiteExplosion, drawBiteExplosion, type BiteExplosion } from '../utils/biteEffects';
 import { extractMouthPose } from '../utils/faceMath';
 import { drawHandDebug } from '../utils/handDebug';
@@ -155,7 +161,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     const onActivityRef = useRef(onActivity);
     const onWaveStartRef = useRef(onWaveStart);
     const lastTrackTimeRef = useRef(0);
-    const waveFramesRef = useRef(0);
+    const waveDetectorRef = useRef<WaveDetectorState>(createWaveDetectorState());
     const processingCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const { lite, trackIntervalMs, enableBite } = performance;
     const blendSmoothing = lite ? LITE_BLEND_SMOOTHING : BLEND_SMOOTHING;
@@ -178,6 +184,12 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     }, [onWaveStart]);
 
     useEffect(() => {
+      if (!started && waveToStart) {
+        resetWaveDetector(waveDetectorRef.current);
+      }
+    }, [started, waveToStart]);
+
+    useEffect(() => {
       transformRef.current = { ...DEFAULT_TRANSFORM };
       activeBlendRef.current = 0;
       idleBlendRef.current = 1;
@@ -185,7 +197,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       cachedPoseRef.current = null;
       biteStateRef.current = createBiteDetectorState();
       explosionRef.current = null;
-      waveFramesRef.current = 0;
+      resetWaveDetector(waveDetectorRef.current);
     }, [recalibrateToken]);
 
     useEffect(() => {
@@ -267,18 +279,13 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
             timestamp - lastTrackTimeRef.current >= trackIntervalMs);
 
         if (previewMode) {
-          if (shouldTrack) {
-            lastTrackTimeRef.current = timestamp;
+          if (trackingReady) {
             const results = detect(frameSource, timestamp);
             const hand = extractPrimaryHand(results?.landmarks ?? []);
-            if (hand) {
-              waveFramesRef.current += 1;
-              if (waveFramesRef.current >= WAVE_HOLD_FRAMES) {
-                waveFramesRef.current = 0;
-                onWaveStartRef.current?.();
-              }
-            } else {
-              waveFramesRef.current = 0;
+            const wristX = hand?.wrist.x ?? null;
+            if (updateWaveDetector(waveDetectorRef.current, wristX)) {
+              resetWaveDetector(waveDetectorRef.current);
+              onWaveStartRef.current?.();
             }
           }
 

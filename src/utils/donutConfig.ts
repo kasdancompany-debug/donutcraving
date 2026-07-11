@@ -57,7 +57,7 @@ export const BITE_COOLDOWN_MS = 1400;
 export const EXPLOSION_DURATION_MS = 750;
 
 /** Consecutive frames with a visible hand before auto-starting (wave to begin). */
-export const WAVE_HOLD_FRAMES = 10;
+export const WAVE_HOLD_FRAMES = 6;
 
 /** Donut pop-in after explosion (ms). */
 export const RESPAWN_DURATION_MS = 450;
