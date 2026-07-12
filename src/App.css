@@ -124,18 +124,7 @@ body,
 }
 
 .attract-screen-glow {
-  position: absolute;
-  width: min(75vw, 520px);
-  height: min(75vw, 520px);
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(245, 237, 224, 0.04) 0%,
-    rgba(232, 160, 168, 0.02) 35%,
-    transparent 68%
-  );
-  animation: attract-pulse 4s ease-in-out infinite;
-  pointer-events: none;
+  display: none;
 }
 
 .attract-floating-donut {
@@ -178,9 +167,7 @@ body,
   line-height: 1.08;
   letter-spacing: -0.01em;
   color: var(--kasdan-cream-light);
-  text-shadow:
-    0 1px 2px rgba(26, 14, 8, 0.9),
-    0 2px 12px rgba(26, 14, 8, 0.65);
+  text-shadow: none;
   animation: attract-headline-float 6s ease-in-out infinite;
 }
 
