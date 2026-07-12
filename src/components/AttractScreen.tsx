@@ -15,13 +15,14 @@ interface AttractScreenProps {
 }
 
 const FLOATING_DONUTS = [
-  { left: '8%', top: '12%', size: 72, duration: 7, delay: 0, rotate: -12 },
-  { left: '78%', top: '8%', size: 96, duration: 9, delay: 1.2, rotate: 18 },
-  { left: '85%', top: '55%', size: 64, duration: 8, delay: 0.6, rotate: -8 },
-  { left: '5%', top: '62%', size: 88, duration: 10, delay: 2, rotate: 14 },
-  { left: '42%', top: '4%', size: 56, duration: 6.5, delay: 0.3, rotate: 6 },
-  { left: '55%', top: '78%', size: 80, duration: 8.5, delay: 1.5, rotate: -16 },
-  { left: '22%', top: '82%', size: 68, duration: 7.5, delay: 0.9, rotate: 10 },
+  { left: '6%', top: '10%', size: 118, duration: 6.5, delay: 0, rotate: -14, drift: 1.15 },
+  { left: '80%', top: '6%', size: 52, duration: 8.2, delay: 1.1, rotate: 22, drift: 0.85 },
+  { left: '88%', top: '48%', size: 96, duration: 7.4, delay: 0.4, rotate: -10, drift: 1 },
+  { left: '3%', top: '58%', size: 74, duration: 9.1, delay: 1.8, rotate: 16, drift: 0.9 },
+  { left: '44%', top: '2%', size: 42, duration: 5.8, delay: 0.2, rotate: 8, drift: 1.2 },
+  { left: '58%', top: '76%', size: 132, duration: 7.8, delay: 1.3, rotate: -18, drift: 1.05 },
+  { left: '18%', top: '80%', size: 58, duration: 6.9, delay: 0.7, rotate: 12, drift: 0.95 },
+  { left: '72%', top: '28%', size: 38, duration: 8.6, delay: 2.1, rotate: -6, drift: 1.1 },
 ] as const;
 
 export function AttractScreen({ visible, onStart, subtext, waveMode = false }: AttractScreenProps) {
@@ -48,7 +49,8 @@ export function AttractScreen({ visible, onStart, subtext, waveMode = false }: A
               height: donut.size,
               animationDuration: `${donut.duration}s`,
               animationDelay: `${donut.delay}s`,
-              transform: `rotate(${donut.rotate}deg)`,
+              ['--donut-tilt' as string]: `${donut.rotate}deg`,
+              ['--donut-drift' as string]: String(donut.drift),
             }}
           />
         ))}
