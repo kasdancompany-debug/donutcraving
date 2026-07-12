@@ -60,6 +60,7 @@ import {
   LITE_POSE_SMOOTHING,
   LITE_POSITION_SMOOTHING,
   LITE_POSITION_SMOOTHING_FAST,
+  ATTRACT_TRACK_INTERVAL_MS,
 } from '../config/performance';
 import { resolveMirrorMode } from '../utils/mirrorState';
 import {
@@ -68,6 +69,7 @@ import {
   smoothTransform,
   type DonutTransform,
 } from '../utils/smoothing';
+import { beatWatchdog } from '../utils/kioskWatchdog';
 
 const BLEND_SMOOTHING = 0.1;
 
@@ -172,6 +174,10 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           positionSmoothingFast: LITE_POSITION_SMOOTHING_FAST,
         }
       : undefined;
+    const attractTrackIntervalMs = Math.max(
+      trackIntervalMs || 0,
+      ATTRACT_TRACK_INTERVAL_MS,
+    );
 
     useImperativeHandle(forwardedRef, () => canvasRef.current as HTMLCanvasElement);
 
@@ -233,78 +239,86 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       window.addEventListener('resize', resize);
 
       const draw = (timestamp: number) => {
-        const video = videoRef.current;
-        const width = canvas.width;
-        const height = canvas.height;
+        beatWatchdog();
 
-        if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-          frameId = requestAnimationFrame(draw);
-          return;
-        }
+        try {
+          const video = videoRef.current;
+          const width = canvas.width;
+          const height = canvas.height;
 
-        const previewMode = waveToStart && !started;
-        if (!started && !previewMode) {
-          frameId = requestAnimationFrame(draw);
-          return;
-        }
-
-        let frameSource: VisionFrameSource = video;
-        let frameWidth = video.videoWidth;
-        let frameHeight = video.videoHeight;
-        let mirrorLandmarks = true;
-        let mirrorCover = true;
-
-        if (camRotate !== 0) {
-          if (!processingCanvasRef.current) {
-            processingCanvasRef.current = document.createElement('canvas');
+          if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+            frameId = requestAnimationFrame(draw);
+            return;
           }
-          const corrected = renderCorrectedVideoFrame(
-            processingCanvasRef.current,
-            video,
-            camRotate,
-            true,
-          );
-          if (corrected.width > 0 && corrected.height > 0) {
-            frameSource = processingCanvasRef.current;
-            frameWidth = corrected.width;
-            frameHeight = corrected.height;
-            mirrorLandmarks = false;
-            mirrorCover = false;
+
+          const previewMode = waveToStart && !started;
+          if (!started && !previewMode) {
+            frameId = requestAnimationFrame(draw);
+            return;
           }
-        }
 
-        const shouldTrack =
-          trackingReady &&
-          (trackIntervalMs === 0 ||
-            timestamp - lastTrackTimeRef.current >= trackIntervalMs);
+          let frameSource: VisionFrameSource = video;
+          let frameWidth = video.videoWidth;
+          let frameHeight = video.videoHeight;
+          let mirrorLandmarks = true;
+          let mirrorCover = true;
 
-        if (previewMode) {
-          if (trackingReady) {
-            const results = detect(frameSource, timestamp);
-            const hand = extractPrimaryHand(results?.landmarks ?? []);
-            const wristX = hand?.wrist.x ?? null;
-            if (updateWaveDetector(waveDetectorRef.current, wristX)) {
-              resetWaveDetector(waveDetectorRef.current);
-              onWaveStartRef.current?.();
+          if (camRotate !== 0) {
+            if (!processingCanvasRef.current) {
+              processingCanvasRef.current = document.createElement('canvas');
+            }
+            const corrected = renderCorrectedVideoFrame(
+              processingCanvasRef.current,
+              video,
+              camRotate,
+              true,
+            );
+            if (corrected.width > 0 && corrected.height > 0) {
+              frameSource = processingCanvasRef.current;
+              frameWidth = corrected.width;
+              frameHeight = corrected.height;
+              mirrorLandmarks = false;
+              mirrorCover = false;
             }
           }
 
-          ctx.clearRect(0, 0, width, height);
-          drawVideoCover(
-            ctx,
-            frameSource,
-            frameWidth,
-            frameHeight,
-            width,
-            height,
-            0.4,
-            mirrorCover,
-          );
-          drawIdleVignette(ctx, width, height, 0.82);
-          drawCinematicVignette(ctx, width, height, 0.45);
-          frameId = requestAnimationFrame(draw);
-          return;
-        }
+          const shouldTrack =
+            trackingReady &&
+            (trackIntervalMs === 0 ||
+              timestamp - lastTrackTimeRef.current >= trackIntervalMs);
+
+          if (previewMode) {
+            const shouldTrackPreview =
+              trackingReady &&
+              timestamp - lastTrackTimeRef.current >= attractTrackIntervalMs;
+
+            if (shouldTrackPreview) {
+              lastTrackTimeRef.current = timestamp;
+              const results = detect(frameSource, timestamp);
+              const hand = extractPrimaryHand(results?.landmarks ?? []);
+              const wristX = hand?.wrist.x ?? null;
+              if (updateWaveDetector(waveDetectorRef.current, wristX)) {
+                resetWaveDetector(waveDetectorRef.current);
+                onWaveStartRef.current?.();
+              }
+            }
+
+            ctx.clearRect(0, 0, width, height);
+            drawVideoCover(
+              ctx,
+              frameSource,
+              frameWidth,
+              frameHeight,
+              width,
+              height,
+              0.4,
+              mirrorCover,
+            );
+            drawIdleVignette(ctx, width, height, 0.82);
+            drawCinematicVignette(ctx, width, height, 0.45);
+            frameId = requestAnimationFrame(draw);
+            return;
+          }
 
         let targetTransform: DonutTransform = { ...DEFAULT_TRANSFORM };
         let mode: 'idle' | 'active' = 'idle';
@@ -605,7 +619,11 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           ctx.restore();
         }
 
-        frameId = requestAnimationFrame(draw);
+          frameId = requestAnimationFrame(draw);
+        } catch (err) {
+          console.error('Mirror draw frame failed:', err);
+          frameId = requestAnimationFrame(draw);
+        }
       };
 
       frameId = requestAnimationFrame(draw);
@@ -623,7 +641,10 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       faceStatus,
       started,
       debugMode,
-      performance,
+      lite,
+      trackIntervalMs,
+      enableBite,
+      attractTrackIntervalMs,
       camRotate,
       waveToStart,
     ]);

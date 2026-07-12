@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AttractScreen } from './components/AttractScreen';
 import { BrandLogo } from './components/BrandLogo';
 import { KioskChrome } from './components/KioskChrome';
@@ -12,8 +12,10 @@ import {
   KIOSK_IDLE_TIMEOUT_MS,
   KIOSK_MAX_SESSION_MS,
 } from './config/branding';
+import { WATCHDOG_STALL_MS } from './config/performance';
 import { useKioskIdleTimeout } from './hooks/useKioskIdleTimeout';
 import { kioskProfile } from './utils/kioskMode';
+import { startKioskWatchdog } from './utils/kioskWatchdog';
 import { downloadCanvasScreenshot } from './utils/screenshot';
 import './App.css';
 
@@ -26,14 +28,19 @@ function App() {
   const [recalibrateToken, setRecalibrateToken] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const { videoRef, status: cameraStatus, error: cameraError, retry } =
+  const { videoRef, status: cameraStatus, error: cameraError, retry: retryCamera } =
     useCamera({ lite: isLite });
-  const { status: trackingStatus, error: trackingError, detect } =
-    useHandTracking({ lite: isLite });
+  const {
+    status: trackingStatus,
+    error: trackingError,
+    detect,
+    retry: retryTracking,
+  } = useHandTracking({ lite: isLite });
   const { status: faceStatus, detect: detectFace } = useFaceTracking({
     enabled: enableBite,
   });
-  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
+  const { isFullscreen, enter: enterFullscreen, toggle: toggleFullscreen } =
+    useFullscreen();
 
   const isLoading =
     cameraStatus === 'idle' ||
@@ -63,9 +70,14 @@ function App() {
   const handleStart = useCallback(() => {
     setStarted(true);
     if (isKiosk) {
-      void toggleFullscreen();
+      void enterFullscreen();
     }
-  }, [isKiosk, toggleFullscreen]);
+  }, [isKiosk, enterFullscreen]);
+
+  const handleRetry = useCallback(() => {
+    if (cameraStatus === 'error') retryCamera();
+    if (trackingStatus === 'error') retryTracking();
+  }, [cameraStatus, trackingStatus, retryCamera, retryTracking]);
 
   const { pingActivity } = useKioskIdleTimeout({
     enabled: started && !hasError,
@@ -89,22 +101,46 @@ function App() {
   }, [started, pingActivity, waveToStart]);
 
   useEffect(() => {
+    if (cameraStatus !== 'ready') return;
+    return startKioskWatchdog({ stallMs: WATCHDOG_STALL_MS });
+  }, [cameraStatus]);
+
+  useEffect(() => {
     if (!isKiosk) return;
 
-    const recoverFromDisplayWake = () => {
-      if (document.visibilityState !== 'visible') return;
-      handleSleep();
-      void retry();
+    let hiddenAt = 0;
+    let wakeTimer: number | undefined;
+    const MIN_HIDDEN_MS = 2_000;
+    const DEBOUNCE_MS = 800;
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        if (wakeTimer !== undefined) {
+          window.clearTimeout(wakeTimer);
+          wakeTimer = undefined;
+        }
+        return;
+      }
+
+      if (!hiddenAt || Date.now() - hiddenAt < MIN_HIDDEN_MS) {
+        hiddenAt = 0;
+        return;
+      }
+
+      hiddenAt = 0;
+      wakeTimer = window.setTimeout(() => {
+        if (document.visibilityState !== 'visible') return;
+        handleSleep();
+      }, DEBOUNCE_MS);
     };
 
-    document.addEventListener('visibilitychange', recoverFromDisplayWake);
-    window.addEventListener('pageshow', recoverFromDisplayWake);
-
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      document.removeEventListener('visibilitychange', recoverFromDisplayWake);
-      window.removeEventListener('pageshow', recoverFromDisplayWake);
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (wakeTimer !== undefined) window.clearTimeout(wakeTimer);
     };
-  }, [isKiosk, handleSleep, retry]);
+  }, [isKiosk, handleSleep]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -130,11 +166,14 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [toggleFullscreen, handleRecalibrate, handleScreenshot, isKiosk, allowDebug]);
 
-  const performance = {
-    lite: isLite,
-    trackIntervalMs,
-    enableBite,
-  };
+  const performance = useMemo(
+    () => ({
+      lite: isLite,
+      trackIntervalMs,
+      enableBite,
+    }),
+    [isLite, trackIntervalMs, enableBite],
+  );
 
   return (
     <div className={`app${isLite ? ' app--lite' : ''}${isKiosk ? ' app--kiosk' : ''}`}>
@@ -195,11 +234,9 @@ function App() {
         <div className="overlay overlay-error">
           <p className="overlay-text">Something went wrong</p>
           <p className="overlay-subtext">{errorMessage}</p>
-          {cameraStatus === 'error' && (
-            <button type="button" className="retry-button" onClick={() => void retry()}>
-              Try again
-            </button>
-          )}
+          <button type="button" className="retry-button" onClick={handleRetry}>
+            Try again
+          </button>
         </div>
       )}
     </div>

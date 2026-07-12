@@ -20,3 +20,12 @@ export const FULL_CAMERA = {
   height: { ideal: 720, max: 1080 },
   frameRate: { ideal: 30, max: 60 },
 } as const;
+
+/** Attract-screen hand ML interval — cooler than every RAF frame. */
+export const ATTRACT_TRACK_INTERVAL_MS = 100;
+
+/** Camera / MediaPipe init must finish within this window. */
+export const INIT_TIMEOUT_MS = 20_000;
+
+/** Soft hang detector: reload if the draw loop stops beating. */
+export const WATCHDOG_STALL_MS = 20_000;

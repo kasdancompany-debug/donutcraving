@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FULL_CAMERA, LITE_CAMERA } from '../config/performance';
+import { FULL_CAMERA, INIT_TIMEOUT_MS, LITE_CAMERA } from '../config/performance';
+import { withTimeout } from '../utils/withTimeout';
 
 export type CameraStatus = 'idle' | 'requesting' | 'ready' | 'error';
 
@@ -38,10 +39,20 @@ function friendlyCameraError(err: unknown): string {
     if (lower.includes('device in use') || lower.includes('not readable')) {
       return 'Your camera is in use by another app or browser tab. Close other webcam tabs, then tap Try again.';
     }
+    if (lower.includes('timed out')) {
+      return 'Camera took too long to start. Trying again…';
+    }
     return err.message;
   }
 
   return 'Unable to access the webcam.';
+}
+
+function isPermissionDenied(err: unknown): boolean {
+  return (
+    err instanceof DOMException &&
+    (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')
+  );
 }
 
 /** Brief pause so the OS releases the camera after the previous stream stops. */
@@ -70,6 +81,8 @@ export function useCamera(options: UseCameraOptions = {}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const sessionRef = useRef(0);
+  const autoRetryAttemptRef = useRef(0);
+  const autoRetryTimerRef = useRef<number | undefined>(undefined);
   const [status, setStatus] = useState<CameraStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState<CameraDimensions>({
@@ -77,8 +90,16 @@ export function useCamera(options: UseCameraOptions = {}) {
     height: 0,
   });
 
+  const clearAutoRetry = useCallback(() => {
+    if (autoRetryTimerRef.current !== undefined) {
+      window.clearTimeout(autoRetryTimerRef.current);
+      autoRetryTimerRef.current = undefined;
+    }
+  }, []);
+
   const startCamera = useCallback(async (waitForRelease = false) => {
     const session = ++sessionRef.current;
+    clearAutoRetry();
 
     setStatus('requesting');
     setError(null);
@@ -93,7 +114,11 @@ export function useCamera(options: UseCameraOptions = {}) {
     if (session !== sessionRef.current) return;
 
     try {
-      const stream = await requestVideoStream(lite);
+      const stream = await withTimeout(
+        requestVideoStream(lite),
+        INIT_TIMEOUT_MS,
+        'Camera timed out while starting.',
+      );
 
       if (session !== sessionRef.current) {
         stopStream(stream);
@@ -119,7 +144,11 @@ export function useCamera(options: UseCameraOptions = {}) {
       };
       track?.addEventListener('ended', onTrackEnded);
 
-      await video.play();
+      await withTimeout(
+        video.play(),
+        INIT_TIMEOUT_MS,
+        'Camera timed out while playing.',
+      );
 
       if (session !== sessionRef.current) {
         stopStream(stream);
@@ -127,6 +156,7 @@ export function useCamera(options: UseCameraOptions = {}) {
         return;
       }
 
+      autoRetryAttemptRef.current = 0;
       setDimensions({
         width: video.videoWidth,
         height: video.videoHeight,
@@ -138,13 +168,23 @@ export function useCamera(options: UseCameraOptions = {}) {
       streamRef.current = null;
       setError(friendlyCameraError(err));
       setStatus('error');
+
+      if (!isPermissionDenied(err)) {
+        const delay = Math.min(30_000, 5_000 * 2 ** autoRetryAttemptRef.current);
+        autoRetryAttemptRef.current += 1;
+        autoRetryTimerRef.current = window.setTimeout(() => {
+          void startCamera(true);
+        }, delay);
+      }
     }
-  }, [lite]);
+  }, [lite, clearAutoRetry]);
 
   useEffect(() => {
     void startCamera(true);
 
-    const onVisible = () => {
+    let ignoreNextPageshow = true;
+
+    const recoverIfNeeded = () => {
       if (document.visibilityState !== 'visible') return;
 
       const track = streamRef.current?.getVideoTracks()[0];
@@ -155,7 +195,11 @@ export function useCamera(options: UseCameraOptions = {}) {
         return;
       }
 
-      if (video && (video.videoWidth === 0 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA)) {
+      if (
+        video &&
+        (video.videoWidth === 0 ||
+          video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA)
+      ) {
         void startCamera(true);
         return;
       }
@@ -165,19 +209,34 @@ export function useCamera(options: UseCameraOptions = {}) {
       }
     };
 
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      recoverIfNeeded();
+    };
+
+    const onPageShow = () => {
+      if (ignoreNextPageshow) {
+        ignoreNextPageshow = false;
+        return;
+      }
+      recoverIfNeeded();
+    };
+
     document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('pageshow', onVisible);
+    window.addEventListener('pageshow', onPageShow);
 
     return () => {
       sessionRef.current += 1;
+      clearAutoRetry();
       stopStream(streamRef.current);
       streamRef.current = null;
       document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('pageshow', onVisible);
+      window.removeEventListener('pageshow', onPageShow);
     };
-  }, [startCamera]);
+  }, [startCamera, clearAutoRetry]);
 
   const retry = useCallback(() => {
+    autoRetryAttemptRef.current = 0;
     void startCamera(true);
   }, [startCamera]);
 

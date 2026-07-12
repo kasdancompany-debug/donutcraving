@@ -45,8 +45,10 @@ export function renderCorrectedVideoFrame(
   }
 
   if (rotation === 0 && !mirror) {
-    target.width = videoWidth;
-    target.height = videoHeight;
+    if (target.width !== videoWidth || target.height !== videoHeight) {
+      target.width = videoWidth;
+      target.height = videoHeight;
+    }
     const ctx = target.getContext('2d');
     ctx?.drawImage(video, 0, 0);
     return { width: videoWidth, height: videoHeight };
@@ -58,8 +60,10 @@ export function renderCorrectedVideoFrame(
     rotation,
   );
 
-  target.width = outW;
-  target.height = outH;
+  if (target.width !== outW || target.height !== outH) {
+    target.width = outW;
+    target.height = outH;
+  }
 
   const ctx = target.getContext('2d');
   if (!ctx) return { width: outW, height: outH };

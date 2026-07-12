@@ -4,13 +4,14 @@ import {
   HandLandmarker,
   type HandLandmarkerResult,
 } from '@mediapipe/tasks-vision';
+import { INIT_TIMEOUT_MS } from '../config/performance';
+import type { VisionFrameSource } from '../utils/cameraOrientation';
+import { withTimeout } from '../utils/withTimeout';
 
 const WASM_PATH =
   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm';
 const MODEL_PATH =
   'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
-
-import type { VisionFrameSource } from '../utils/cameraOrientation';
 
 export type HandTrackingStatus = 'loading' | 'ready' | 'error';
 
@@ -23,9 +24,12 @@ export function useHandTracking(options: UseHandTrackingOptions = {}) {
   const landmarkerRef = useRef<HandLandmarker | null>(null);
   const [status, setStatus] = useState<HandTrackingStatus>('loading');
   const [error, setError] = useState<string | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimer: number | undefined;
+    let attempt = 0;
 
     async function createLandmarker(delegate: 'GPU' | 'CPU') {
       const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
@@ -43,28 +47,39 @@ export function useHandTracking(options: UseHandTrackingOptions = {}) {
     }
 
     async function init() {
+      setStatus('loading');
+      setError(null);
+
       try {
-        let landmarker: HandLandmarker;
-        if (lite) {
-          try {
-            landmarker = await createLandmarker('CPU');
-          } catch {
-            landmarker = await createLandmarker('GPU');
+        const create = async () => {
+          if (lite) {
+            try {
+              return await createLandmarker('CPU');
+            } catch {
+              return createLandmarker('GPU');
+            }
           }
-        } else {
           try {
-            landmarker = await createLandmarker('GPU');
+            return await createLandmarker('GPU');
           } catch {
-            landmarker = await createLandmarker('CPU');
+            return createLandmarker('CPU');
           }
-        }
+        };
+
+        const landmarker = await withTimeout(
+          create(),
+          INIT_TIMEOUT_MS,
+          'Hand tracking timed out while loading.',
+        );
 
         if (cancelled) {
           landmarker.close();
           return;
         }
 
+        landmarkerRef.current?.close();
         landmarkerRef.current = landmarker;
+        attempt = 0;
         setStatus('ready');
       } catch (err) {
         if (cancelled) return;
@@ -74,6 +89,12 @@ export function useHandTracking(options: UseHandTrackingOptions = {}) {
             : 'Failed to initialize hand tracking.';
         setError(message);
         setStatus('error');
+
+        const delay = Math.min(30_000, 3_000 * 2 ** attempt);
+        attempt += 1;
+        retryTimer = window.setTimeout(() => {
+          void init();
+        }, delay);
       }
     }
 
@@ -81,23 +102,35 @@ export function useHandTracking(options: UseHandTrackingOptions = {}) {
 
     return () => {
       cancelled = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
       landmarkerRef.current?.close();
       landmarkerRef.current = null;
     };
-  }, [lite]);
+  }, [lite, retryToken]);
 
   const detect = useCallback(
     (source: VisionFrameSource, timestamp: number): HandLandmarkerResult | null => {
       const landmarker = landmarkerRef.current;
       if (!landmarker) return null;
-      if (source instanceof HTMLVideoElement && source.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      if (
+        source instanceof HTMLVideoElement &&
+        source.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
+      ) {
         return null;
       }
 
-      return landmarker.detectForVideo(source, timestamp);
+      try {
+        return landmarker.detectForVideo(source, timestamp);
+      } catch {
+        return null;
+      }
     },
     [],
   );
 
-  return { status, error, detect };
+  const retry = useCallback(() => {
+    setRetryToken((token) => token + 1);
+  }, []);
+
+  return { status, error, detect, retry };
 }
