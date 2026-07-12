@@ -83,10 +83,11 @@ body,
   padding: 2rem;
   border: none;
   cursor: pointer;
-  background:
-    radial-gradient(ellipse 80% 60% at 50% 45%, rgba(200, 135, 74, 0.14) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 40% at 20% 80%, rgba(232, 160, 168, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse 100% 100% at 50% 50%, #3a2218 0%, var(--kasdan-espresso-deep) 68%);
+  background: radial-gradient(
+    ellipse 100% 100% at 50% 50%,
+    #3a2218 0%,
+    var(--kasdan-espresso-deep) 68%
+  );
   color: var(--kasdan-cream);
   text-align: center;
   animation: attract-fade-in 1.4s ease-out;
@@ -109,10 +110,11 @@ body,
 .attract-screen--wave {
   cursor: default;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse 80% 60% at 50% 45%, rgba(200, 135, 74, 0.1) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 40% at 20% 80%, rgba(232, 160, 168, 0.06) 0%, transparent 50%),
-    linear-gradient(180deg, rgba(42, 24, 16, 0.58) 0%, rgba(42, 24, 16, 0.76) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(42, 24, 16, 0.62) 0%,
+    rgba(42, 24, 16, 0.78) 100%
+  );
 }
 
 .attract-screen--wave::after {
@@ -169,6 +171,8 @@ body,
   letter-spacing: -0.01em;
   color: var(--kasdan-cream-light);
   text-shadow: none;
+  filter: none;
+  -webkit-text-stroke: 0;
   animation: attract-headline-float 6s ease-in-out infinite;
 }
 

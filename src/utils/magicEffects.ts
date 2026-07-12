@@ -335,8 +335,8 @@ export function drawIdleHint(
   const fontSize = Math.max(18, Math.min(width * 0.032, 38));
   ctx.font = serifFont(fontSize, 500, true);
   ctx.fillStyle = rgba(COLORS.textPrimary, 0.9 * blend * pulse);
-  ctx.shadowColor = rgba(COLORS.creamLight, 0.92 * blend);
-  ctx.shadowBlur = 14;
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
   ctx.fillText(text, width / 2, height * 0.87);
   ctx.restore();
 }

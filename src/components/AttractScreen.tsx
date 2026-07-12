@@ -32,8 +32,6 @@ export function AttractScreen({ visible, onStart, subtext, waveMode = false }: A
 
   const content = (
     <>
-      <div className="attract-screen-glow" aria-hidden />
-
       {donutSrc &&
         FLOATING_DONUTS.map((donut, index) => (
           <img
