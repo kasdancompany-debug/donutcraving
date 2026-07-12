@@ -112,14 +112,14 @@ body,
   background:
     radial-gradient(ellipse 80% 60% at 50% 45%, rgba(200, 135, 74, 0.1) 0%, transparent 60%),
     radial-gradient(ellipse 50% 40% at 20% 80%, rgba(232, 160, 168, 0.06) 0%, transparent 50%),
-    linear-gradient(180deg, rgba(42, 24, 16, 0.42) 0%, rgba(42, 24, 16, 0.62) 100%);
+    linear-gradient(180deg, rgba(42, 24, 16, 0.58) 0%, rgba(42, 24, 16, 0.76) 100%);
 }
 
 .attract-screen--wave::after {
   background: radial-gradient(
     ellipse at center,
-    transparent 35%,
-    rgba(26, 14, 8, 0.35) 100%
+    transparent 32%,
+    rgba(26, 14, 8, 0.48) 100%
   );
 }
 
@@ -130,8 +130,8 @@ body,
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgba(245, 237, 224, 0.12) 0%,
-    rgba(232, 160, 168, 0.06) 35%,
+    rgba(245, 237, 224, 0.04) 0%,
+    rgba(232, 160, 168, 0.02) 35%,
     transparent 68%
   );
   animation: attract-pulse 4s ease-in-out infinite;
@@ -179,8 +179,8 @@ body,
   letter-spacing: -0.01em;
   color: var(--kasdan-cream-light);
   text-shadow:
-    0 2px 40px rgba(200, 135, 74, 0.25),
-    0 0 80px rgba(232, 160, 168, 0.12);
+    0 1px 2px rgba(26, 14, 8, 0.9),
+    0 2px 12px rgba(26, 14, 8, 0.65);
   animation: attract-headline-float 6s ease-in-out infinite;
 }
 
@@ -345,16 +345,21 @@ body,
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--kasdan-cream-muted);
+  color: var(--kasdan-cream-light);
   text-align: center;
   max-width: 140px;
   line-height: 1.35;
+  text-shadow:
+    0 1px 2px rgba(26, 14, 8, 0.9),
+    0 2px 8px rgba(26, 14, 8, 0.55);
 }
 
 .kiosk-qr-corner .qr-panel-label {
   font-weight: 600;
-  color: var(--kasdan-text-primary);
-  text-shadow: var(--kasdan-text-halo);
+  color: var(--kasdan-cream-light);
+  text-shadow:
+    0 1px 2px rgba(26, 14, 8, 0.9),
+    0 2px 8px rgba(26, 14, 8, 0.55);
 }
 
 .qr-panel--compact .qr-panel-label {

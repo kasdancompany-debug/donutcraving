@@ -297,11 +297,11 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
             frameHeight,
             width,
             height,
-            0.28,
+            0.4,
             mirrorCover,
           );
-          drawIdleVignette(ctx, width, height, 0.75);
-          drawCinematicVignette(ctx, width, height, 0.38);
+          drawIdleVignette(ctx, width, height, 0.82);
+          drawCinematicVignette(ctx, width, height, 0.45);
           frameId = requestAnimationFrame(draw);
           return;
         }
