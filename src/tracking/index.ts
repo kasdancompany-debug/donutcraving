@@ -27,3 +27,13 @@ export {
   personFromPose,
   POSE_LANDMARK,
 } from './detections';
+export type {
+  TrackingEvent,
+  TrackingEventType,
+  TrackingEventListener,
+  PlaybackSummary,
+} from './events';
+export {
+  summarizeTrackingSession,
+  exportTrackingConfigJson,
+} from './events';

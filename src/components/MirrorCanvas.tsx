@@ -80,6 +80,8 @@ import {
   poseFromLandmarks,
   drawTrackingDebugOverlay,
   type TrackingSnapshot,
+  type TrackingConfig,
+  type TrackingEvent,
 } from '../tracking';
 
 const BLEND_SMOOTHING = 0.1;
@@ -107,6 +109,18 @@ interface MirrorCanvasProps {
   waveToStart?: boolean;
   onWaveStart?: () => void;
   onActivity?: () => void;
+  /** When set, MediaPipe/tracker timestamps come from video.currentTime (replay lab). */
+  useVideoTimestamps?: boolean;
+  /** Force tracking debug overlay even without ?debug=1. */
+  forceDebugOverlay?: boolean;
+  /** Live threshold overrides from the replay lab. */
+  trackingConfig?: Partial<TrackingConfig>;
+  /** Bump to force a track pass while paused (frame step). */
+  stepToken?: number;
+  /** Optional mirror override (recordings may already be upright). */
+  mirrorFeed?: boolean;
+  onTrackingEvent?: (event: TrackingEvent) => void;
+  onInferenceSample?: (inferenceMs: number, mediaTimestampMs: number) => void;
 }
 
 function drawVideoCover(
@@ -161,6 +175,13 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       waveToStart = false,
       onWaveStart,
       onActivity,
+      useVideoTimestamps = false,
+      forceDebugOverlay = false,
+      trackingConfig,
+      stepToken = 0,
+      mirrorFeed = true,
+      onTrackingEvent,
+      onInferenceSample,
     },
     forwardedRef,
   ) {
@@ -177,6 +198,9 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     const explosionRef = useRef<BiteExplosion | null>(null);
     const onActivityRef = useRef(onActivity);
     const onWaveStartRef = useRef(onWaveStart);
+    const onTrackingEventRef = useRef(onTrackingEvent);
+    const onInferenceSampleRef = useRef(onInferenceSample);
+    const lastMediaTsRef = useRef(-1);
     const lastTrackTimeRef = useRef(0);
     const waveDetectorRef = useRef<WaveDetectorState>(createWaveDetectorState());
     const processingCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -216,6 +240,27 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     }, [onWaveStart]);
 
     useEffect(() => {
+      onTrackingEventRef.current = onTrackingEvent;
+    }, [onTrackingEvent]);
+
+    useEffect(() => {
+      onInferenceSampleRef.current = onInferenceSample;
+    }, [onInferenceSample]);
+
+    useEffect(() => {
+      subjectTrackerRef.current?.setEventListener((event) => {
+        onTrackingEventRef.current?.(event);
+      });
+      return () => subjectTrackerRef.current?.setEventListener(null);
+    }, []);
+
+    useEffect(() => {
+      if (trackingConfig) {
+        subjectTrackerRef.current?.patchConfig(trackingConfig);
+      }
+    }, [trackingConfig]);
+
+    useEffect(() => {
       if (!started && waveToStart) {
         resetWaveDetector(waveDetectorRef.current);
       }
@@ -233,6 +278,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       subjectTrackerRef.current?.reset();
       wasInteractingRef.current = false;
       trackingSnapshotRef.current = null;
+      lastMediaTsRef.current = -1;
     }, [recalibrateToken]);
 
     useEffect(() => {
@@ -289,8 +335,8 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           let frameSource: VisionFrameSource = video;
           let frameWidth = video.videoWidth;
           let frameHeight = video.videoHeight;
-          let mirrorLandmarks = true;
-          let mirrorCover = true;
+          let mirrorLandmarks = mirrorFeed;
+          let mirrorCover = mirrorFeed;
 
           if (camRotate !== 0) {
             if (!processingCanvasRef.current) {
@@ -300,7 +346,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
               processingCanvasRef.current,
               video,
               camRotate,
-              true,
+              mirrorFeed,
             );
             if (corrected.width > 0 && corrected.height > 0) {
               frameSource = processingCanvasRef.current;
@@ -311,10 +357,22 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
             }
           }
 
+          const mediaTimestamp = useVideoTimestamps
+            ? Math.round(video.currentTime * 1000)
+            : timestamp;
+          const mediaAdvanced =
+            !useVideoTimestamps || mediaTimestamp !== lastMediaTsRef.current;
+
           const shouldTrack =
             trackingReady &&
+            mediaAdvanced &&
             (trackIntervalMs === 0 ||
+              useVideoTimestamps ||
               timestamp - lastTrackTimeRef.current >= trackIntervalMs);
+
+          if (shouldTrack && useVideoTimestamps) {
+            lastMediaTsRef.current = mediaTimestamp;
+          }
 
           if (previewMode) {
             const shouldTrackPreview =
@@ -323,7 +381,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
 
             if (shouldTrackPreview) {
               lastTrackTimeRef.current = timestamp;
-              const results = detect(frameSource, timestamp);
+              const results = detect(frameSource, mediaTimestamp);
               const hand = extractPrimaryHand(results?.landmarks ?? []);
               const wristX = hand?.wrist.x ?? null;
               if (updateWaveDetector(waveDetectorRef.current, wristX)) {
@@ -355,12 +413,12 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         let handDetected = false;
 
         if (shouldTrack) {
-          lastTrackTimeRef.current = timestamp;
+          lastTrackTimeRef.current = useVideoTimestamps ? mediaTimestamp : timestamp;
           const inferStart = globalThis.performance.now();
 
-          const results = detect(frameSource, timestamp);
-          const faceResults = faceReady ? detectFace(frameSource, timestamp) : null;
-          const poseResults = poseReady ? detectPose(frameSource, timestamp) : null;
+          const results = detect(frameSource, mediaTimestamp);
+          const faceResults = faceReady ? detectFace(frameSource, mediaTimestamp) : null;
+          const poseResults = poseReady ? detectPose(frameSource, mediaTimestamp) : null;
 
           const poses = (poseResults?.landmarks ?? [])
             .map((lm) => poseFromLandmarks(lm))
@@ -371,7 +429,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
 
           const tracker = subjectTrackerRef.current!;
           const snapshot = tracker.update({
-            timestamp,
+            timestamp: mediaTimestamp,
             people,
             hands,
             faces,
@@ -419,10 +477,10 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
 
           const interacting = mode === 'active' && targetTransform.visible;
           if (interacting && !wasInteractingRef.current) {
-            tracker.notifyInteractionStarted(timestamp);
+            tracker.notifyInteractionStarted(mediaTimestamp);
             wasInteractingRef.current = true;
           } else if (!interacting && wasInteractingRef.current) {
-            tracker.notifyInteractionCompleted(timestamp);
+            tracker.notifyInteractionCompleted(mediaTimestamp);
             wasInteractingRef.current = false;
           }
 
@@ -453,6 +511,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           }
 
           fpsRef.current.inferMs = globalThis.performance.now() - inferStart;
+          onInferenceSampleRef.current?.(fpsRef.current.inferMs, mediaTimestamp);
         } else if (trackingReady) {
           targetTransform = cachedTargetRef.current;
           mode = targetTransform.visible ? 'active' : 'idle';
@@ -705,7 +764,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           ctx.restore();
         }
 
-        if (debugMode && trackingSnapshotRef.current) {
+        if ((debugMode || forceDebugOverlay) && trackingSnapshotRef.current) {
           const prev = fpsRef.current.lastTs;
           if (prev > 0) {
             const dt = timestamp - prev;
@@ -755,6 +814,10 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       faceStatus,
       started,
       debugMode,
+      forceDebugOverlay,
+      useVideoTimestamps,
+      mirrorFeed,
+      stepToken,
       lite,
       trackIntervalMs,
       enableBite,

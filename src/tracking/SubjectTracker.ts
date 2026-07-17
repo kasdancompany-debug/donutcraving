@@ -1,4 +1,5 @@
 import { CandidateScorer, candidateAnchor } from './CandidateScorer';
+import type { TrackingEvent, TrackingEventListener } from './events';
 import { GestureStabilizer } from './GestureStabilizer';
 import { HandAssociator } from './HandAssociator';
 import {
@@ -42,17 +43,38 @@ export class TrackingStateMachine {
   private lastTimestamp = 0;
   private continuity = new Map<string, ContinuityRecord>();
   private nextSubjectSerial = 1;
+  private knownCandidateKeys = new Set<string>();
+  private prevAssociatedHandIds = new Set<string>();
+  private gestureDwelling = false;
+  private wasMissing = false;
+  private eventListener: TrackingEventListener | null = null;
 
   private readonly config: TrackingConfig;
-  private readonly scorer: CandidateScorer;
-  private readonly hands: HandAssociator;
-  private readonly gestures: GestureStabilizer;
+  private scorer: CandidateScorer;
+  private hands: HandAssociator;
+  private gestures: GestureStabilizer;
 
   constructor(config: TrackingConfig) {
     this.config = config;
     this.scorer = new CandidateScorer(config);
     this.hands = new HandAssociator(config);
     this.gestures = new GestureStabilizer(config);
+  }
+
+  setEventListener(listener: TrackingEventListener | null): void {
+    this.eventListener = listener;
+  }
+
+  /** Live-update thresholds without resetting lock state. */
+  patchConfig(partial: Partial<TrackingConfig>): void {
+    Object.assign(this.config, partial);
+    this.scorer = new CandidateScorer(this.config);
+    this.hands = new HandAssociator(this.config);
+    this.gestures = new GestureStabilizer(this.config);
+  }
+
+  getConfig(): TrackingConfig {
+    return { ...this.config };
   }
 
   getState(): TrackingState {
@@ -71,7 +93,25 @@ export class TrackingStateMachine {
     this.cooldownUntil = 0;
     this.lastTimestamp = timestamp;
     this.continuity.clear();
+    this.knownCandidateKeys.clear();
+    this.prevAssociatedHandIds.clear();
+    this.gestureDwelling = false;
+    this.wasMissing = false;
     this.gestures.reset();
+  }
+
+  private emit(
+    type: TrackingEvent['type'],
+    timestamp: number,
+    detail?: string,
+    subjectId?: string,
+  ): void {
+    this.eventListener?.({
+      type,
+      timestamp,
+      detail,
+      subjectId: subjectId ?? this.active?.trackingId,
+    });
   }
 
   update(input: TrackingFrameInput): TrackingSnapshot {
@@ -90,6 +130,7 @@ export class TrackingStateMachine {
     );
 
     const gesture = this.gestures.update(!!input.gestureValid, input.timestamp);
+    this.trackGestureEvents(gesture, input.timestamp);
 
     switch (this.state) {
       case 'IDLE':
@@ -117,12 +158,44 @@ export class TrackingStateMachine {
       this.active.rightHand = assoc.right;
       associatedHands = assoc.associated;
       controllingHand = assoc.controlling;
+      this.trackHandAssociation(associatedHands, input.timestamp);
+    } else {
+      this.prevAssociatedHandIds.clear();
     }
 
     return this.snapshot(ranked, gesture, input.timestamp, associatedHands, controllingHand);
   }
 
-  /** Notify that an interaction began (donut control engaged). */
+  private trackGestureEvents(
+    gesture: TrackingSnapshot['gesture'],
+    timestamp: number,
+  ): void {
+    if (gesture.dwellProgress > 0 && !this.gestureDwelling && !gesture.triggered) {
+      this.gestureDwelling = true;
+      this.emit('gesture_started', timestamp, `dwell ${Math.round(gesture.dwellProgress * 100)}%`);
+    }
+    if (gesture.dwellProgress === 0 && this.gestureDwelling && !gesture.triggered) {
+      this.gestureDwelling = false;
+      this.emit('gesture_cancelled', timestamp);
+    }
+    if (gesture.triggered) {
+      this.gestureDwelling = false;
+      this.emit('gesture_triggered', timestamp);
+    }
+  }
+
+  private trackHandAssociation(
+    associatedHands: TrackingSnapshot['associatedHands'],
+    timestamp: number,
+  ): void {
+    for (const hand of associatedHands) {
+      if (!this.prevAssociatedHandIds.has(hand.id)) {
+        this.emit('hand_associated', timestamp, hand.id);
+      }
+    }
+    this.prevAssociatedHandIds = new Set(associatedHands.map((hand) => hand.id));
+  }
+
   notifyInteractionStarted(timestamp: number): void {
     if (this.state === 'LOCKED' || this.state === 'INTERACTING') {
       this.state = 'INTERACTING';
@@ -130,11 +203,11 @@ export class TrackingStateMachine {
     }
   }
 
-  /** Notify that an interaction completed; enter cooldown before others can steal. */
   notifyInteractionCompleted(timestamp: number): void {
     this.cooldownUntil = timestamp + this.config.cooldownMs;
     this.state = 'COOLDOWN';
     this.gestures.reset();
+    this.gestureDwelling = false;
   }
 
   private enrichContinuity(
@@ -163,6 +236,11 @@ export class TrackingStateMachine {
         ? existing.visibleMs + Math.max(0, timestamp - existing.lastSeenAt)
         : 0;
 
+      if (!this.knownCandidateKeys.has(key)) {
+        this.knownCandidateKeys.add(key);
+        this.emit('candidate_entered', timestamp, key);
+      }
+
       this.continuity.set(key, {
         key,
         firstSeenAt: existing?.firstSeenAt ?? timestamp,
@@ -178,10 +256,10 @@ export class TrackingStateMachine {
       };
     });
 
-    // Drop stale continuity records.
     for (const [key, rec] of this.continuity) {
       if (!matchedKeys.has(key) && timestamp - rec.lastSeenAt > this.config.missingGraceMs) {
         this.continuity.delete(key);
+        this.knownCandidateKeys.delete(key);
       }
     }
 
@@ -202,6 +280,7 @@ export class TrackingStateMachine {
     this.acquiringKey = best.frameId;
     this.acquiringSince = timestamp;
     this.state = 'ACQUIRING';
+    this.emit('acquisition_started', timestamp, best.frameId);
   }
 
   private stepAcquiring(
@@ -213,6 +292,7 @@ export class TrackingStateMachine {
       if (best) {
         this.acquiringKey = best.frameId;
         this.acquiringSince = timestamp;
+        this.emit('acquisition_started', timestamp, best.frameId);
       } else {
         this.acquiringKey = null;
         this.acquiringSince = null;
@@ -227,6 +307,7 @@ export class TrackingStateMachine {
       this.state = 'LOCKED';
       this.acquiringKey = null;
       this.acquiringSince = null;
+      this.emit('subject_locked', timestamp, best.frameId, this.active.trackingId);
     }
   }
 
@@ -250,7 +331,6 @@ export class TrackingStateMachine {
     if (!this.refreshActive(ranked, input, dt)) return;
 
     if (!input.interactionActive && this.active) {
-      // Soft drop back to LOCKED while still tracking the same guest.
       if (input.timestamp >= this.cooldownUntil) {
         this.state = 'LOCKED';
       }
@@ -262,7 +342,6 @@ export class TrackingStateMachine {
     input: TrackingFrameInput,
     dt: number,
   ): void {
-    // Keep the same subject if still visible; never switch during cooldown.
     if (this.active) {
       this.refreshActive(ranked, input, dt, true);
     }
@@ -271,15 +350,14 @@ export class TrackingStateMachine {
       if (this.active && this.active.missingSince === null) {
         this.state = 'LOCKED';
       } else {
+        const releasedId = this.active?.trackingId;
         this.active = null;
         this.state = 'IDLE';
+        this.emit('subject_released', input.timestamp, 'cooldown ended', releasedId);
       }
     }
   }
 
-  /**
-   * Update / coast active subject. Returns false if lock released.
-   */
   private refreshActive(
     ranked: Array<PersonCandidate & { score: number }>,
     input: TrackingFrameInput,
@@ -293,7 +371,6 @@ export class TrackingStateMachine {
 
     const match = this.findMatchingCandidate(ranked, this.active);
 
-    // Hysteresis: do not switch merely because someone else scores higher.
     if (
       !freezeSwitch &&
       match &&
@@ -302,12 +379,14 @@ export class TrackingStateMachine {
       ranked[0].score > match.score + this.config.switchScoreMargin &&
       input.timestamp >= this.cooldownUntil
     ) {
-      // Only consider a switch after margin AND not in post-interaction cooldown.
-      // Still require re-acquire path rather than instant steal.
       // Keep current lock — intentional anti-steal.
     }
 
     if (match && match.detectionConfidence >= this.config.keepConfidence) {
+      if (this.wasMissing || this.active.missingSince != null) {
+        this.emit('subject_reacquired', input.timestamp);
+        this.wasMissing = false;
+      }
       this.applyObservation(this.active, match, input, dt);
       const assoc = this.hands.associate(this.active, input.hands);
       this.active.leftHand = assoc.left;
@@ -315,8 +394,11 @@ export class TrackingStateMachine {
       return true;
     }
 
-    // Temporary loss — coast with velocity up to missingGraceMs.
     const missingSince = this.active.missingSince ?? input.timestamp;
+    if (this.active.missingSince === null) {
+      this.emit('subject_temporarily_missing', input.timestamp);
+      this.wasMissing = true;
+    }
     this.active.missingSince = missingSince;
     const missingFor = input.timestamp - missingSince;
 
@@ -344,16 +426,19 @@ export class TrackingStateMachine {
         this.active.confidence * 0.92,
       );
 
-      // Still try to keep hands via previous positions.
       const assoc = this.hands.associate(this.active, input.hands);
       this.active.leftHand = assoc.left;
       this.active.rightHand = assoc.right;
       return true;
     }
 
+    const releasedId = this.active.trackingId;
     this.active = null;
     this.state = 'IDLE';
     this.gestures.reset();
+    this.gestureDwelling = false;
+    this.wasMissing = false;
+    this.emit('subject_released', input.timestamp, 'grace expired', releasedId);
     return false;
   }
 
@@ -488,7 +573,18 @@ export class SubjectTracker {
   getState(): TrackingState {
     return this.machine.getState();
   }
+
+  setEventListener(listener: TrackingEventListener | null): void {
+    this.machine.setEventListener(listener);
+  }
+
+  patchConfig(partial: Partial<TrackingConfig>): void {
+    this.machine.patchConfig(partial);
+  }
+
+  getConfig(): TrackingConfig {
+    return this.machine.getConfig();
+  }
 }
 
-// Avoid unused import warning if makeTempId unused — use in tests helpers later
 export { makeTempId };

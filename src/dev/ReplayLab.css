@@ -1,0 +1,150 @@
+.replay-lab {
+  display: grid;
+  grid-template-columns: 1fr min(380px, 40vw);
+  width: 100vw;
+  height: 100vh;
+  background: #1a0e08;
+  color: #f5ede0;
+  font-family: "DM Sans", "Segoe UI", system-ui, sans-serif;
+}
+
+.replay-stage {
+  position: relative;
+  overflow: hidden;
+  background: #0d0705;
+}
+
+.replay-stage .mirror-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.replay-empty {
+  display: grid;
+  place-content: center;
+  gap: 0.75rem;
+  height: 100%;
+  padding: 2rem;
+  text-align: center;
+}
+
+.replay-empty h1 {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 2rem;
+  font-weight: 400;
+}
+
+.replay-panel {
+  overflow: auto;
+  border-left: 1px solid rgba(245, 237, 224, 0.12);
+  background: #24160f;
+  padding: 1rem 1rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.replay-panel h2 {
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #d4a574;
+  margin-bottom: 0.6rem;
+}
+
+.replay-panel section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.replay-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.replay-panel button,
+.replay-file {
+  appearance: none;
+  border: 1px solid rgba(245, 237, 224, 0.2);
+  background: rgba(42, 24, 16, 0.9);
+  color: #f5ede0;
+  border-radius: 8px;
+  padding: 0.4rem 0.65rem;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.replay-panel button.is-active,
+.replay-panel button:hover,
+.replay-file:hover {
+  border-color: #c8874a;
+  background: rgba(62, 36, 24, 0.95);
+}
+
+.replay-file input {
+  display: none;
+}
+
+.replay-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+}
+
+.replay-slider {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.78rem;
+}
+
+.replay-slider input,
+.replay-panel input[type='range'] {
+  width: 100%;
+}
+
+.replay-meta {
+  font-size: 0.75rem;
+  color: rgba(245, 237, 224, 0.65);
+}
+
+.replay-error {
+  color: #e8a0a8;
+}
+
+.replay-log {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid rgba(245, 237, 224, 0.12);
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: rgba(14, 8, 5, 0.55);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.replay-log-line code {
+  color: #d4a574;
+}
+
+.replay-summary {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 960px) {
+  .replay-lab {
+    grid-template-columns: 1fr;
+    grid-template-rows: 55vh 1fr;
+  }
+
+  .replay-panel {
+    border-left: none;
+    border-top: 1px solid rgba(245, 237, 224, 0.12);
+  }
+}
