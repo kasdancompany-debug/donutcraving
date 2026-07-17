@@ -123,8 +123,16 @@ export function extractPrimaryHand(
   landmarks: NormalizedLandmark[][],
 ): HandLandmarks | null {
   if (landmarks.length === 0) return null;
+  return extractHandByIndex(landmarks, 0);
+}
 
-  const hand = landmarks[0];
+export function extractHandByIndex(
+  landmarks: NormalizedLandmark[][],
+  index: number,
+): HandLandmarks | null {
+  const hand = landmarks[index];
+  if (!hand) return null;
+
   return {
     wrist: hand[LANDMARK.WRIST],
     indexMcp: hand[LANDMARK.INDEX_MCP],

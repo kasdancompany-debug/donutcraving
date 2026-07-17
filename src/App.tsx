@@ -8,6 +8,7 @@ import { useFullscreen } from './hooks/useFullscreen';
 import { useFullscreenPrompt } from './hooks/useFullscreenPrompt';
 import { useFaceTracking } from './hooks/useFaceTracking';
 import { useHandTracking } from './hooks/useHandTracking';
+import { usePoseTracking } from './hooks/usePoseTracking';
 import {
   KIOSK_IDLE_TIMEOUT_MS,
   KIOSK_MAX_SESSION_MS,
@@ -37,7 +38,11 @@ function App() {
     retry: retryTracking,
   } = useHandTracking({ lite: isLite });
   const { status: faceStatus, detect: detectFace } = useFaceTracking({
-    enabled: enableBite,
+    enabled: true,
+  });
+  const { status: poseStatus, detect: detectPose } = usePoseTracking({
+    enabled: true,
+    lite: isLite,
   });
   const { isFullscreen, enter: enterFullscreen, toggle: toggleFullscreen } =
     useFullscreen();
@@ -186,8 +191,10 @@ function App() {
           videoRef={videoRef}
           detect={detect}
           detectFace={detectFace}
+          detectPose={detectPose}
           trackingReady={trackingStatus === 'ready'}
           faceReady={faceStatus === 'ready'}
+          poseReady={poseStatus === 'ready' || poseStatus === 'disabled'}
           faceStatus={faceStatus}
           started={started}
           debugMode={allowDebug && debugMode}

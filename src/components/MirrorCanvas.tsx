@@ -5,7 +5,7 @@ import {
   useRef,
   type RefObject,
 } from 'react';
-import type { FaceLandmarkerResult, HandLandmarkerResult } from '@mediapipe/tasks-vision';
+import type { FaceLandmarkerResult, HandLandmarkerResult, PoseLandmarkerResult } from '@mediapipe/tasks-vision';
 import { DONUT_IMAGE_PATH } from '../config/branding';
 import { USE_PROCEDURAL_DONUT, resolveDonutDrawable } from '../utils/donutRenderer';
 import {
@@ -22,6 +22,7 @@ import {
 } from '../utils/magicEffects';
 import {
   estimateHandPose,
+  extractHandByIndex,
   extractPrimaryHand,
   getVideoCoverRect,
   type HandPose,
@@ -70,6 +71,16 @@ import {
   type DonutTransform,
 } from '../utils/smoothing';
 import { beatWatchdog } from '../utils/kioskWatchdog';
+import {
+  SubjectTracker,
+  createTrackingConfig,
+  buildPeopleCandidates,
+  handsFromLandmarks,
+  facesFromLandmarks,
+  poseFromLandmarks,
+  drawTrackingDebugOverlay,
+  type TrackingSnapshot,
+} from '../tracking';
 
 const BLEND_SMOOTHING = 0.1;
 
@@ -83,8 +94,10 @@ interface MirrorCanvasProps {
   videoRef: RefObject<HTMLVideoElement | null>;
   detect: (source: VisionFrameSource, timestamp: number) => HandLandmarkerResult | null;
   detectFace: (source: VisionFrameSource, timestamp: number) => FaceLandmarkerResult | null;
+  detectPose: (source: VisionFrameSource, timestamp: number) => PoseLandmarkerResult | null;
   trackingReady: boolean;
   faceReady: boolean;
+  poseReady: boolean;
   faceStatus: 'loading' | 'ready' | 'error';
   started: boolean;
   debugMode: boolean;
@@ -135,8 +148,10 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       videoRef,
       detect,
       detectFace,
+      detectPose,
       trackingReady,
       faceReady,
+      poseReady,
       faceStatus,
       started,
       debugMode,
@@ -165,7 +180,18 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     const lastTrackTimeRef = useRef(0);
     const waveDetectorRef = useRef<WaveDetectorState>(createWaveDetectorState());
     const processingCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const subjectTrackerRef = useRef<SubjectTracker | null>(null);
+    const trackingSnapshotRef = useRef<TrackingSnapshot | null>(null);
+    const wasInteractingRef = useRef(false);
+    const fpsRef = useRef({ lastTs: 0, fps: 0, inferMs: 0 });
     const { lite, trackIntervalMs, enableBite } = performance;
+    if (!subjectTrackerRef.current) {
+      subjectTrackerRef.current = new SubjectTracker(
+        createTrackingConfig({
+          smoothingAlpha: lite ? 0.42 : 0.35,
+        }),
+      );
+    }
     const blendSmoothing = lite ? LITE_BLEND_SMOOTHING : BLEND_SMOOTHING;
     const smoothOptions = lite
       ? {
@@ -204,6 +230,9 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       biteStateRef.current = createBiteDetectorState();
       explosionRef.current = null;
       resetWaveDetector(waveDetectorRef.current);
+      subjectTrackerRef.current?.reset();
+      wasInteractingRef.current = false;
+      trackingSnapshotRef.current = null;
     }, [recalibrateToken]);
 
     useEffect(() => {
@@ -327,9 +356,41 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
 
         if (shouldTrack) {
           lastTrackTimeRef.current = timestamp;
+          const inferStart = globalThis.performance.now();
 
           const results = detect(frameSource, timestamp);
-          const hand = extractPrimaryHand(results?.landmarks ?? []);
+          const faceResults = faceReady ? detectFace(frameSource, timestamp) : null;
+          const poseResults = poseReady ? detectPose(frameSource, timestamp) : null;
+
+          const poses = (poseResults?.landmarks ?? [])
+            .map((lm) => poseFromLandmarks(lm))
+            .filter((p): p is NonNullable<typeof p> => !!p);
+          const faces = facesFromLandmarks(faceResults?.faceLandmarks ?? []);
+          const hands = handsFromLandmarks(results?.landmarks ?? []);
+          const people = buildPeopleCandidates(poses, faces);
+
+          const tracker = subjectTrackerRef.current!;
+          const snapshot = tracker.update({
+            timestamp,
+            people,
+            hands,
+            faces,
+            interactionActive: wasInteractingRef.current,
+            gestureValid: false,
+          });
+          trackingSnapshotRef.current = snapshot;
+
+          // Resolve controlling hand → canvas donut pose (active subject only).
+          let hand = null as ReturnType<typeof extractPrimaryHand>;
+          if (
+            snapshot.controllingHand &&
+            (snapshot.state === 'LOCKED' ||
+              snapshot.state === 'INTERACTING' ||
+              snapshot.state === 'COOLDOWN')
+          ) {
+            const handIndex = Number(snapshot.controllingHand.id.split('_')[1] ?? 0);
+            hand = extractHandByIndex(results?.landmarks ?? [], handIndex);
+          }
 
           if (hand) {
             handDetected = true;
@@ -355,6 +416,43 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           }
 
           cachedTargetRef.current = targetTransform;
+
+          const interacting = mode === 'active' && targetTransform.visible;
+          if (interacting && !wasInteractingRef.current) {
+            tracker.notifyInteractionStarted(timestamp);
+            wasInteractingRef.current = true;
+          } else if (!interacting && wasInteractingRef.current) {
+            tracker.notifyInteractionCompleted(timestamp);
+            wasInteractingRef.current = false;
+          }
+
+          if (enableBite && faceReady) {
+            let faceIndex = 0;
+            if (snapshot.activeSubject?.faceCenter && faces.length > 1) {
+              const anchor = snapshot.activeSubject.faceCenter;
+              let best = 0;
+              let bestDist = Infinity;
+              faces.forEach((face, index) => {
+                const d = Math.hypot(face.center.x - anchor.x, face.center.y - anchor.y);
+                if (d < bestDist) {
+                  bestDist = d;
+                  best = index;
+                }
+              });
+              faceIndex = best;
+            }
+            mouthPose = extractMouthPose(
+              faceResults?.faceLandmarks ?? [],
+              width,
+              height,
+              frameWidth,
+              frameHeight,
+              mirrorLandmarks,
+              faceIndex,
+            );
+          }
+
+          fpsRef.current.inferMs = globalThis.performance.now() - inferStart;
         } else if (trackingReady) {
           targetTransform = cachedTargetRef.current;
           mode = targetTransform.visible ? 'active' : 'idle';
@@ -362,18 +460,6 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         } else {
           targetTransform = cachedTargetRef.current;
           mode = targetTransform.visible ? 'active' : 'idle';
-        }
-
-        if (enableBite && faceReady && shouldTrack) {
-          const faceResults = detectFace(frameSource, timestamp);
-          mouthPose = extractMouthPose(
-            faceResults?.faceLandmarks ?? [],
-            width,
-            height,
-            frameWidth,
-            frameHeight,
-            mirrorLandmarks,
-          );
         }
 
         if (enableBite) {
@@ -619,6 +705,32 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           ctx.restore();
         }
 
+        if (debugMode && trackingSnapshotRef.current) {
+          const prev = fpsRef.current.lastTs;
+          if (prev > 0) {
+            const dt = timestamp - prev;
+            if (dt > 0) {
+              const instant = 1000 / dt;
+              fpsRef.current.fps = fpsRef.current.fps
+                ? fpsRef.current.fps * 0.85 + instant * 0.15
+                : instant;
+            }
+          }
+          fpsRef.current.lastTs = timestamp;
+
+          drawTrackingDebugOverlay(
+            ctx,
+            width,
+            height,
+            trackingSnapshotRef.current,
+            {
+              fps: fpsRef.current.fps,
+              inferenceMs: fpsRef.current.inferMs,
+              mirrored: mirrorLandmarks,
+            },
+          );
+        }
+
           frameId = requestAnimationFrame(draw);
         } catch (err) {
           console.error('Mirror draw frame failed:', err);
@@ -636,8 +748,10 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       videoRef,
       detect,
       detectFace,
+      detectPose,
       trackingReady,
       faceReady,
+      poseReady,
       faceStatus,
       started,
       debugMode,

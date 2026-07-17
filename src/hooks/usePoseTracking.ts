@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  FaceLandmarker,
   FilesetResolver,
-  type FaceLandmarkerResult,
+  PoseLandmarker,
+  type PoseLandmarkerResult,
 } from '@mediapipe/tasks-vision';
 import { INIT_TIMEOUT_MS } from '../config/performance';
 import type { VisionFrameSource } from '../utils/cameraOrientation';
@@ -11,26 +11,30 @@ import { withTimeout } from '../utils/withTimeout';
 const WASM_PATH =
   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm';
 const MODEL_PATH =
-  'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+  'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
 
-export type FaceTrackingStatus = 'loading' | 'ready' | 'error';
+export type PoseTrackingStatus = 'loading' | 'ready' | 'error' | 'disabled';
 
-interface UseFaceTrackingOptions {
+interface UsePoseTrackingOptions {
   enabled?: boolean;
+  lite?: boolean;
+  numPoses?: number;
 }
 
-export function useFaceTracking(options: UseFaceTrackingOptions = {}) {
+export function usePoseTracking(options: UsePoseTrackingOptions = {}) {
   const enabled = options.enabled ?? true;
-  const landmarkerRef = useRef<FaceLandmarker | null>(null);
-  const [status, setStatus] = useState<FaceTrackingStatus>(
-    enabled ? 'loading' : 'ready',
+  const lite = options.lite ?? false;
+  const numPoses = options.numPoses ?? (lite ? 3 : 4);
+  const landmarkerRef = useRef<PoseLandmarker | null>(null);
+  const [status, setStatus] = useState<PoseTrackingStatus>(
+    enabled ? 'loading' : 'disabled',
   );
   const [error, setError] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     if (!enabled) {
-      setStatus('ready');
+      setStatus('disabled');
       setError(null);
       return;
     }
@@ -41,16 +45,16 @@ export function useFaceTracking(options: UseFaceTrackingOptions = {}) {
 
     async function createLandmarker(delegate: 'GPU' | 'CPU') {
       const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
-      return FaceLandmarker.createFromOptions(vision, {
+      return PoseLandmarker.createFromOptions(vision, {
         baseOptions: {
           modelAssetPath: MODEL_PATH,
           delegate,
         },
         runningMode: 'VIDEO',
-        numFaces: 4,
-        minFaceDetectionConfidence: 0.4,
-        minFacePresenceConfidence: 0.4,
-        minTrackingConfidence: 0.4,
+        numPoses,
+        minPoseDetectionConfidence: lite ? 0.4 : 0.5,
+        minPosePresenceConfidence: lite ? 0.4 : 0.5,
+        minTrackingConfidence: lite ? 0.4 : 0.5,
       });
     }
 
@@ -60,17 +64,24 @@ export function useFaceTracking(options: UseFaceTrackingOptions = {}) {
 
       try {
         const create = async () => {
+          if (lite) {
+            try {
+              return await createLandmarker('CPU');
+            } catch {
+              return createLandmarker('GPU');
+            }
+          }
           try {
-            return await createLandmarker('CPU');
+            return await createLandmarker('GPU');
           } catch {
-            return createLandmarker('GPU');
+            return createLandmarker('CPU');
           }
         };
 
         const landmarker = await withTimeout(
           create(),
           INIT_TIMEOUT_MS,
-          'Face tracking timed out while loading.',
+          'Pose tracking timed out while loading.',
         );
 
         if (cancelled) {
@@ -87,7 +98,7 @@ export function useFaceTracking(options: UseFaceTrackingOptions = {}) {
         const message =
           err instanceof Error
             ? err.message
-            : 'Failed to initialize face tracking.';
+            : 'Failed to initialize pose tracking.';
         setError(message);
         setStatus('error');
 
@@ -107,12 +118,11 @@ export function useFaceTracking(options: UseFaceTrackingOptions = {}) {
       landmarkerRef.current?.close();
       landmarkerRef.current = null;
     };
-  }, [enabled, retryToken]);
+  }, [enabled, lite, numPoses, retryToken]);
 
   const detect = useCallback(
-    (source: VisionFrameSource, timestamp: number): FaceLandmarkerResult | null => {
+    (source: VisionFrameSource, timestamp: number): PoseLandmarkerResult | null => {
       if (!enabled) return null;
-
       const landmarker = landmarkerRef.current;
       if (!landmarker) return null;
       if (

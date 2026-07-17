@@ -35,10 +35,11 @@ export function extractMouthPose(
   videoWidth: number,
   videoHeight: number,
   mirrored = true,
+  faceIndex = 0,
 ): MouthPose | null {
-  if (faceLandmarks.length === 0) return null;
+  if (faceLandmarks.length === 0 || !faceLandmarks[faceIndex]) return null;
 
-  const face = faceLandmarks[0];
+  const face = faceLandmarks[faceIndex];
   const cover = getVideoCoverRect(
     videoWidth,
     videoHeight,

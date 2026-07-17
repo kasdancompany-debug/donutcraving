@@ -1,0 +1,29 @@
+export type {
+  TrackingState,
+  ActiveSubject,
+  PersonCandidate,
+  HandObservation,
+  FaceObservation,
+  TrackingFrameInput,
+  TrackingSnapshot,
+  TrackingConfig,
+  GestureDebug,
+} from './types';
+
+export { DEFAULT_TRACKING_CONFIG, createTrackingConfig } from './config';
+export { CandidateScorer, candidateAnchor } from './CandidateScorer';
+export { HandAssociator } from './HandAssociator';
+export { GestureStabilizer } from './GestureStabilizer';
+export { SubjectTracker, TrackingStateMachine } from './SubjectTracker';
+export {
+  drawTrackingDebugOverlay,
+  TrackingDebugOverlay,
+} from './TrackingDebugOverlay';
+export {
+  buildPeopleCandidates,
+  handsFromLandmarks,
+  facesFromLandmarks,
+  poseFromLandmarks,
+  personFromPose,
+  POSE_LANDMARK,
+} from './detections';

@@ -39,7 +39,7 @@ export function useHandTracking(options: UseHandTrackingOptions = {}) {
           delegate,
         },
         runningMode: 'VIDEO',
-        numHands: 1,
+        numHands: lite ? 2 : 4,
         minHandDetectionConfidence: lite ? 0.5 : 0.55,
         minHandPresenceConfidence: lite ? 0.5 : 0.55,
         minTrackingConfidence: lite ? 0.5 : 0.55,
