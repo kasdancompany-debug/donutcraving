@@ -12,10 +12,10 @@ export function useReplayCamera() {
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
   const [paused, setPaused] = useState(true);
   const [speed, setSpeedState] = useState<ReplaySpeed>(1);
   const [stepToken, setStepToken] = useState(0);
+  const currentTimeRef = useRef(0);
 
   const revokeUrl = useCallback(() => {
     if (objectUrlRef.current) {
@@ -64,7 +64,7 @@ export function useReplayCamera() {
           video.currentTime = 0;
           video.playbackRate = speed;
           setDuration(video.duration || 0);
-          setCurrentTime(0);
+          currentTimeRef.current = 0;
           setStatus('ready');
         })
         .catch((err: unknown) => {
@@ -79,7 +79,9 @@ export function useReplayCamera() {
     const video = videoRef.current;
     if (!video) return;
 
-    const onTime = () => setCurrentTime(video.currentTime);
+    const onTime = () => {
+      currentTimeRef.current = video.currentTime;
+    };
     const onPlay = () => setPaused(false);
     const onPause = () => setPaused(true);
     const onEnded = () => setPaused(true);
@@ -142,7 +144,7 @@ export function useReplayCamera() {
     if (!video) return;
     video.pause();
     video.currentTime = 0;
-    setCurrentTime(0);
+    currentTimeRef.current = 0;
     setStepToken((token) => token + 1);
   }, []);
 
@@ -152,13 +154,14 @@ export function useReplayCamera() {
     return Math.round((video?.currentTime ?? 0) * 1000);
   }, []);
 
+  const getCurrentTime = useCallback(() => currentTimeRef.current, []);
+
   return {
     videoRef,
     status,
     error,
     fileName,
     duration,
-    currentTime,
     paused,
     speed,
     stepToken,
@@ -170,5 +173,6 @@ export function useReplayCamera() {
     stepFrame,
     restart,
     getMediaTimestampMs,
+    getCurrentTime,
   };
 }

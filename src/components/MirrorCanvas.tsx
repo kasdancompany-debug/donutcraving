@@ -82,6 +82,7 @@ import {
   type TrackingSnapshot,
   type TrackingConfig,
   type TrackingEvent,
+  type PoseLandmarksNorm,
 } from '../tracking';
 
 const BLEND_SMOOTHING = 0.1;
@@ -121,6 +122,13 @@ interface MirrorCanvasProps {
   mirrorFeed?: boolean;
   onTrackingEvent?: (event: TrackingEvent) => void;
   onInferenceSample?: (inferenceMs: number, mediaTimestampMs: number) => void;
+  /**
+   * When true, canvas only draws overlays (donut/debug). Use a visible <video>
+   * underneath so playback stays smooth while ML runs.
+   */
+  videoUnderlay?: boolean;
+  /** Snappier donut follow — useful for replay / debugging lag. */
+  lowLatencyFollow?: boolean;
 }
 
 function drawVideoCover(
@@ -182,6 +190,8 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       mirrorFeed = true,
       onTrackingEvent,
       onInferenceSample,
+      videoUnderlay = false,
+      lowLatencyFollow = false,
     },
     forwardedRef,
   ) {
@@ -202,6 +212,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     const onInferenceSampleRef = useRef(onInferenceSample);
     const lastMediaTsRef = useRef(-1);
     const lastTrackTimeRef = useRef(0);
+    const lastPoseLandmarksRef = useRef<PoseLandmarksNorm[]>([]);
     const waveDetectorRef = useRef<WaveDetectorState>(createWaveDetectorState());
     const processingCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const subjectTrackerRef = useRef<SubjectTracker | null>(null);
@@ -216,14 +227,25 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         }),
       );
     }
-    const blendSmoothing = lite ? LITE_BLEND_SMOOTHING : BLEND_SMOOTHING;
-    const smoothOptions = lite
+    const blendSmoothing = lowLatencyFollow
+      ? 0.55
+      : lite
+        ? LITE_BLEND_SMOOTHING
+        : BLEND_SMOOTHING;
+    const smoothOptions = lowLatencyFollow
       ? {
-          poseSmoothing: LITE_POSE_SMOOTHING,
-          positionSmoothing: LITE_POSITION_SMOOTHING,
-          positionSmoothingFast: LITE_POSITION_SMOOTHING_FAST,
+          poseSmoothing: 0.72,
+          positionSmoothing: 0.82,
+          positionSmoothingFast: 0.94,
+          fastMoveThreshold: 28,
         }
-      : undefined;
+      : lite
+        ? {
+            poseSmoothing: LITE_POSE_SMOOTHING,
+            positionSmoothing: LITE_POSITION_SMOOTHING,
+            positionSmoothingFast: LITE_POSITION_SMOOTHING_FAST,
+          }
+        : undefined;
     const attractTrackIntervalMs = Math.max(
       trackIntervalMs || 0,
       ATTRACT_TRACK_INTERVAL_MS,
@@ -360,18 +382,24 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           const mediaTimestamp = useVideoTimestamps
             ? Math.round(video.currentTime * 1000)
             : timestamp;
+
+          // Always throttle on wall-clock so ML cannot block every RAF (choppy video).
+          // Video timestamps are still passed into MediaPipe/tracker for realistic dwell/grace.
+          const trackDue =
+            trackIntervalMs === 0 ||
+            timestamp - lastTrackTimeRef.current >= trackIntervalMs;
           const mediaAdvanced =
             !useVideoTimestamps || mediaTimestamp !== lastMediaTsRef.current;
 
-          const shouldTrack =
-            trackingReady &&
-            mediaAdvanced &&
-            (trackIntervalMs === 0 ||
-              useVideoTimestamps ||
-              timestamp - lastTrackTimeRef.current >= trackIntervalMs);
+          const shouldTrack = trackingReady && trackDue && mediaAdvanced;
 
           if (shouldTrack && useVideoTimestamps) {
             lastMediaTsRef.current = mediaTimestamp;
+          }
+
+          // Paint the camera/video frame first so the display stays smooth even if ML is slow.
+          if (!videoUnderlay && !previewMode) {
+            // Defer full scene draw until after tracking — handled below.
           }
 
           if (previewMode) {
@@ -413,19 +441,30 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         let handDetected = false;
 
         if (shouldTrack) {
-          lastTrackTimeRef.current = useVideoTimestamps ? mediaTimestamp : timestamp;
+          lastTrackTimeRef.current = timestamp;
           const inferStart = globalThis.performance.now();
 
           const results = detect(frameSource, mediaTimestamp);
-          const faceResults = faceReady ? detectFace(frameSource, mediaTimestamp) : null;
-          const poseResults = poseReady ? detectPose(frameSource, mediaTimestamp) : null;
+          // Face mesh is expensive — only when bite is on.
+          const faceResults =
+            enableBite && faceReady
+              ? detectFace(frameSource, mediaTimestamp)
+              : null;
+          const poseResults = poseReady
+            ? detectPose(frameSource, mediaTimestamp)
+            : null;
 
           const poses = (poseResults?.landmarks ?? [])
             .map((lm) => poseFromLandmarks(lm))
             .filter((p): p is NonNullable<typeof p> => !!p);
+          if (poses.length > 0) {
+            lastPoseLandmarksRef.current = poses;
+          }
+          const posesForPeople =
+            poses.length > 0 ? poses : lastPoseLandmarksRef.current;
           const faces = facesFromLandmarks(faceResults?.faceLandmarks ?? []);
           const hands = handsFromLandmarks(results?.landmarks ?? []);
-          const people = buildPeopleCandidates(poses, faces);
+          const people = buildPeopleCandidates(posesForPeople, faces);
 
           const tracker = subjectTrackerRef.current!;
           const snapshot = tracker.update({
@@ -574,7 +613,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         transformRef.current = smoothTransform(
           transformRef.current,
           targetTransform,
-          lite ? LITE_POSE_SMOOTHING : blendSmoothing,
+          lowLatencyFollow ? 0.72 : lite ? LITE_POSE_SMOOTHING : blendSmoothing,
           smoothOptions,
         );
 
@@ -600,22 +639,24 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
               : 0;
 
         ctx.clearRect(0, 0, width, height);
-        drawVideoCover(
-          ctx,
-          frameSource,
-          frameWidth,
-          frameHeight,
-          width,
-          height,
-          idleBlend,
-          mirrorCover,
-        );
+        if (!videoUnderlay) {
+          drawVideoCover(
+            ctx,
+            frameSource,
+            frameWidth,
+            frameHeight,
+            width,
+            height,
+            idleBlend,
+            mirrorCover,
+          );
+        }
 
-        if (!lite) {
+        if (!lite && !videoUnderlay) {
           drawBakeryLighting(ctx, width, height);
         }
 
-        if (!lite) {
+        if (!lite && !videoUnderlay) {
           const particleBlend = Math.max(idleBlend, activeBlend * 0.35);
           drawAmbientSparkles(
             ctx,
@@ -628,8 +669,10 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           drawIdlePulse(ctx, width, height, timestamp, idleBlend);
         }
 
-        drawIdleVignette(ctx, width, height, idleBlend);
-        drawIdleHint(ctx, width, height, timestamp, idleBlend);
+        if (!videoUnderlay) {
+          drawIdleVignette(ctx, width, height, idleBlend);
+          drawIdleHint(ctx, width, height, timestamp, idleBlend);
+        }
 
         if (
           showDonut &&
@@ -706,9 +749,11 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         }
 
         drawDesireText(ctx, width, height, timestamp, activeBlend);
-        drawCinematicVignette(ctx, width, height, lite ? 0.34 : 0.42);
+        if (!videoUnderlay) {
+          drawCinematicVignette(ctx, width, height, lite ? 0.34 : 0.42);
+        }
 
-        if (!lite) {
+        if (!lite && !videoUnderlay) {
           drawFilmGrain(ctx, width, height, timestamp);
         }
 
@@ -816,6 +861,8 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       debugMode,
       forceDebugOverlay,
       useVideoTimestamps,
+      videoUnderlay,
+      lowLatencyFollow,
       mirrorFeed,
       stepToken,
       lite,

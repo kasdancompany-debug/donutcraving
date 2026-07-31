@@ -8,6 +8,7 @@ export type {
   TrackingSnapshot,
   TrackingConfig,
   GestureDebug,
+  PoseLandmarksNorm,
 } from './types';
 
 export { DEFAULT_TRACKING_CONFIG, createTrackingConfig } from './config';

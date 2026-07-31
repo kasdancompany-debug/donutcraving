@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MirrorCanvas } from '../components/MirrorCanvas';
 import { useFaceTracking } from '../hooks/useFaceTracking';
 import { useHandTracking } from '../hooks/useHandTracking';
@@ -44,54 +44,92 @@ const TUNABLE: Array<{
  */
 export function ReplayLab() {
   const replay = useReplayCamera();
-  const { status: handStatus, detect, error: handError } = useHandTracking({ lite: true });
-  const { status: faceStatus, detect: detectFace } = useFaceTracking({ enabled: true });
+  // Desktop replay: prefer GPU (lite:false) — CPU ML was a big source of chop.
+  const { status: handStatus, detect, error: handError } = useHandTracking({ lite: false });
+  const { status: faceStatus, detect: detectFace } = useFaceTracking({ enabled: false });
   const { status: poseStatus, detect: detectPose } = usePoseTracking({
     enabled: true,
-    lite: true,
+    lite: false,
   });
 
-  const [config, setConfig] = useState<TrackingConfig>({ ...DEFAULT_TRACKING_CONFIG });
+  const [config, setConfig] = useState<TrackingConfig>({
+    ...DEFAULT_TRACKING_CONFIG,
+    smoothingAlpha: 0.55,
+  });
   const [events, setEvents] = useState<TrackingEvent[]>([]);
-  const [inferenceSamples, setInferenceSamples] = useState<number[]>([]);
   const [summary, setSummary] = useState<PlaybackSummary | null>(null);
   const [recalibrateToken, setRecalibrateToken] = useState(0);
-  const [mirrorFeed, setMirrorFeed] = useState(true);
+  const [mirrorFeed, setMirrorFeed] = useState(false);
+  const [uiTime, setUiTime] = useState(0);
+
+  const eventsRef = useRef<TrackingEvent[]>([]);
+  const inferenceRef = useRef<number[]>([]);
+  const flushTimerRef = useRef<number | undefined>(undefined);
 
   const modelsReady =
     handStatus === 'ready' &&
-    (faceStatus === 'ready' || faceStatus === 'error') &&
     (poseStatus === 'ready' || poseStatus === 'error' || poseStatus === 'disabled');
 
   const performance = useMemo(
     () => ({
-      lite: true,
-      trackIntervalMs: 0,
+      // Full-quality follow math; still throttle inference for smooth video.
+      lite: false,
+      trackIntervalMs: 50,
       enableBite: false,
     }),
     [],
   );
 
-  const onTrackingEvent = useCallback((event: TrackingEvent) => {
-    setEvents((prev) => [...prev.slice(-400), event]);
+  const scheduleEventFlush = useCallback(() => {
+    if (flushTimerRef.current !== undefined) return;
+    flushTimerRef.current = window.setTimeout(() => {
+      flushTimerRef.current = undefined;
+      setEvents([...eventsRef.current]);
+    }, 200);
   }, []);
+
+  const onTrackingEvent = useCallback(
+    (event: TrackingEvent) => {
+      eventsRef.current = [...eventsRef.current.slice(-400), event];
+      scheduleEventFlush();
+    },
+    [scheduleEventFlush],
+  );
 
   const onInferenceSample = useCallback((inferenceMs: number) => {
-    setInferenceSamples((prev) => [...prev.slice(-500), inferenceMs]);
+    inferenceRef.current = [...inferenceRef.current.slice(-500), inferenceMs];
   }, []);
 
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setUiTime(replay.getCurrentTime());
+    }, 200);
+    return () => window.clearInterval(id);
+  }, [replay]);
+
+  useEffect(
+    () => () => {
+      if (flushTimerRef.current !== undefined) {
+        window.clearTimeout(flushTimerRef.current);
+      }
+    },
+    [],
+  );
+
   const clearSession = useCallback(() => {
+    eventsRef.current = [];
+    inferenceRef.current = [];
     setEvents([]);
-    setInferenceSamples([]);
     setSummary(null);
     setRecalibrateToken((token) => token + 1);
     replay.restart();
   }, [replay]);
 
   const finishPlayback = useCallback(() => {
-    setSummary(summarizeTrackingSession(events, inferenceSamples));
+    setEvents([...eventsRef.current]);
+    setSummary(summarizeTrackingSession(eventsRef.current, inferenceRef.current));
     replay.pause();
-  }, [events, inferenceSamples, replay]);
+  }, [replay]);
 
   const exportConfig = useCallback(() => {
     const blob = new Blob([exportTrackingConfigJson(config)], {
@@ -114,9 +152,14 @@ export function ReplayLab() {
 
   return (
     <div className="replay-lab">
-      <video ref={replay.videoRef} className="hidden-video" playsInline muted />
-
       <div className="replay-stage">
+        <video
+          ref={replay.videoRef}
+          className={`replay-video${mirrorFeed ? ' replay-video--mirror' : ''}`}
+          playsInline
+          muted
+        />
+
         {replay.status === 'ready' && modelsReady ? (
           <MirrorCanvas
             videoRef={replay.videoRef}
@@ -124,13 +167,15 @@ export function ReplayLab() {
             detectFace={detectFace}
             detectPose={detectPose}
             trackingReady={handStatus === 'ready'}
-            faceReady={faceStatus === 'ready'}
+            faceReady={false}
             poseReady={poseStatus === 'ready' || poseStatus === 'disabled'}
             faceStatus={faceStatus}
             started
             debugMode
             forceDebugOverlay
             useVideoTimestamps
+            videoUnderlay
+            lowLatencyFollow
             trackingConfig={config}
             stepToken={replay.stepToken}
             mirrorFeed={mirrorFeed}
@@ -169,7 +214,7 @@ export function ReplayLab() {
               checked={mirrorFeed}
               onChange={(event) => setMirrorFeed(event.target.checked)}
             />
-            Mirror feed (selfie)
+            Mirror feed (turn on if donut is flipped vs the hand)
           </label>
         </section>
 
@@ -209,13 +254,13 @@ export function ReplayLab() {
             min={0}
             max={replay.duration || 0}
             step={0.01}
-            value={replay.currentTime}
+            value={uiTime}
             onChange={(event) => replay.seek(Number(event.target.value))}
             disabled={replay.status !== 'ready'}
           />
           <p className="replay-meta">
-            {replay.currentTime.toFixed(2)}s / {(replay.duration || 0).toFixed(2)}s · media{' '}
-            {Math.round(replay.currentTime * 1000)}ms
+            {uiTime.toFixed(2)}s / {(replay.duration || 0).toFixed(2)}s · media{' '}
+            {Math.round(uiTime * 1000)}ms
           </p>
         </section>
 
@@ -227,7 +272,9 @@ export function ReplayLab() {
             </button>
             <button
               type="button"
-              onClick={() => setConfig({ ...DEFAULT_TRACKING_CONFIG })}
+              onClick={() =>
+                setConfig({ ...DEFAULT_TRACKING_CONFIG, smoothingAlpha: 0.55 })
+              }
             >
               Reset defaults
             </button>
@@ -237,9 +284,7 @@ export function ReplayLab() {
               <span>
                 {field.label}:{' '}
                 <strong>
-                  {Number(config[field.key]).toFixed(
-                    field.step < 1 ? 2 : 0,
-                  )}
+                  {Number(config[field.key]).toFixed(field.step < 1 ? 2 : 0)}
                 </strong>
               </span>
               <input
