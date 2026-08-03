@@ -204,6 +204,43 @@ describe('SubjectTracker', () => {
     expect(snap.activeSubject).toBeNull();
   });
 
+  it('stays locked on A while B is more prominent, then locks B after A leaves', () => {
+    const tracker = new SubjectTracker(
+      createTrackingConfig({ missingGraceMs: 400, acquireHoldMs: 200 }),
+    );
+    const a = person('a', 0.35, 0.55);
+    let ts = lockOn(tracker, a, 1000);
+    const lockedId = tracker.update(frame(ts, [a])).activeSubject!.trackingId;
+
+    const b = person('b', 0.65, 0.5, {
+      detectionConfidence: 0.99,
+      box: { x: 0.5, y: 0.25, width: 0.4, height: 0.55 },
+    });
+
+    for (let i = 0; i < 10; i += 1) {
+      ts += 50;
+      const snap = tracker.update(frame(ts, [a, b]));
+      expect(snap.activeSubject?.trackingId).toBe(lockedId);
+      expect(snap.state).not.toBe('IDLE');
+    }
+
+    // A leaves — after grace, release and acquire B.
+    ts += 50;
+    tracker.update(frame(ts, [b]));
+    ts += 500;
+    let snap = tracker.update(frame(ts, [b]));
+    expect(snap.state === 'IDLE' || snap.state === 'ACQUIRING' || snap.state === 'LOCKED').toBe(
+      true,
+    );
+
+    ts += 50;
+    snap = tracker.update(frame(ts, [b]));
+    ts += 250;
+    snap = tracker.update(frame(ts, [b]));
+    expect(snap.state).toBe('LOCKED');
+    expect(snap.activeSubject?.trackingId).not.toBe(lockedId);
+  });
+
   it('requires gesture dwell and neutral reset (flicker rejected)', () => {
     const tracker = new SubjectTracker(
       createTrackingConfig({ gestureDwellMs: 350 }),

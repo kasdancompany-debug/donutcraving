@@ -106,6 +106,13 @@ export interface TrackingConfig {
   acquireConfidence: number;
   keepConfidence: number;
   switchScoreMargin: number;
+  /**
+   * When true (default), never steal the lock for another person while the
+   * active guest is still in frame — only release after missingGraceMs.
+   */
+  exclusiveLock: boolean;
+  /** Max normalized distance to keep matching the locked guest. */
+  lockMatchDistance: number;
   smoothingAlpha: number;
   minFaceArea: number;
   minBodyArea: number;

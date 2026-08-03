@@ -37,6 +37,8 @@ function makeTempId(prefix: string): string {
 export class TrackingStateMachine {
   private state: TrackingState = 'IDLE';
   private active: ActiveSubject | null = null;
+  /** Continuity key of the locked guest — preferred over proximity rematch. */
+  private lockedCandidateKey: string | null = null;
   private acquiringKey: string | null = null;
   private acquiringSince: number | null = null;
   private cooldownUntil = 0;
@@ -88,6 +90,7 @@ export class TrackingStateMachine {
   reset(timestamp = 0): void {
     this.state = 'IDLE';
     this.active = null;
+    this.lockedCandidateKey = null;
     this.acquiringKey = null;
     this.acquiringSince = null;
     this.cooldownUntil = 0;
@@ -287,27 +290,40 @@ export class TrackingStateMachine {
     ranked: Array<PersonCandidate & { score: number }>,
     timestamp: number,
   ): void {
-    const best = ranked[0];
-    if (!best || best.frameId !== this.acquiringKey) {
-      if (best) {
-        this.acquiringKey = best.frameId;
-        this.acquiringSince = timestamp;
-        this.emit('acquisition_started', timestamp, best.frameId);
-      } else {
+    // Stick with the acquiring candidate while they remain visible — don't
+    // thrash if someone else briefly scores higher in a crowd.
+    const current =
+      this.acquiringKey != null
+        ? ranked.find((c) => c.frameId === this.acquiringKey)
+        : undefined;
+
+    if (current) {
+      const elapsed = timestamp - (this.acquiringSince ?? timestamp);
+      if (elapsed >= this.config.acquireHoldMs) {
+        this.active = this.createSubject(current, timestamp);
+        this.lockedCandidateKey = current.frameId;
+        this.state = 'LOCKED';
         this.acquiringKey = null;
         this.acquiringSince = null;
-        this.state = 'IDLE';
+        this.emit(
+          'subject_locked',
+          timestamp,
+          current.frameId,
+          this.active.trackingId,
+        );
       }
       return;
     }
 
-    const elapsed = timestamp - (this.acquiringSince ?? timestamp);
-    if (elapsed >= this.config.acquireHoldMs) {
-      this.active = this.createSubject(best, timestamp);
-      this.state = 'LOCKED';
+    const best = ranked[0];
+    if (best) {
+      this.acquiringKey = best.frameId;
+      this.acquiringSince = timestamp;
+      this.emit('acquisition_started', timestamp, best.frameId);
+    } else {
       this.acquiringKey = null;
       this.acquiringSince = null;
-      this.emit('subject_locked', timestamp, best.frameId, this.active.trackingId);
+      this.state = 'IDLE';
     }
   }
 
@@ -352,6 +368,7 @@ export class TrackingStateMachine {
       } else {
         const releasedId = this.active?.trackingId;
         this.active = null;
+        this.lockedCandidateKey = null;
         this.state = 'IDLE';
         this.emit('subject_released', input.timestamp, 'cooldown ended', releasedId);
       }
@@ -362,31 +379,24 @@ export class TrackingStateMachine {
     ranked: Array<PersonCandidate & { score: number }>,
     input: TrackingFrameInput,
     dt: number,
-    freezeSwitch = false,
+    _freezeSwitch = false,
   ): boolean {
     if (!this.active) {
       this.state = 'IDLE';
+      this.lockedCandidateKey = null;
       return false;
     }
 
+    // Exclusive lock: never rematch onto a higher-scoring stranger while the
+    // locked guest is still trackable (or within missing grace).
     const match = this.findMatchingCandidate(ranked, this.active);
-
-    if (
-      !freezeSwitch &&
-      match &&
-      ranked[0] &&
-      ranked[0].frameId !== match.frameId &&
-      ranked[0].score > match.score + this.config.switchScoreMargin &&
-      input.timestamp >= this.cooldownUntil
-    ) {
-      // Keep current lock — intentional anti-steal.
-    }
 
     if (match && match.detectionConfidence >= this.config.keepConfidence) {
       if (this.wasMissing || this.active.missingSince != null) {
         this.emit('subject_reacquired', input.timestamp);
         this.wasMissing = false;
       }
+      this.lockedCandidateKey = match.frameId;
       this.applyObservation(this.active, match, input, dt);
       const assoc = this.hands.associate(this.active, input.hands);
       this.active.leftHand = assoc.left;
@@ -434,6 +444,7 @@ export class TrackingStateMachine {
 
     const releasedId = this.active.trackingId;
     this.active = null;
+    this.lockedCandidateKey = null;
     this.state = 'IDLE';
     this.gestures.reset();
     this.gestureDwelling = false;
@@ -446,9 +457,24 @@ export class TrackingStateMachine {
     ranked: Array<PersonCandidate & { score: number }>,
     active: ActiveSubject,
   ): (PersonCandidate & { score: number }) | null {
+    // Prefer the same continuity key we locked onto.
+    if (this.lockedCandidateKey) {
+      const byKey = ranked.find(
+        (c) =>
+          c.frameId === this.lockedCandidateKey &&
+          c.detectionConfidence >= this.config.keepConfidence,
+      );
+      if (byKey) return byKey;
+    }
+
+    // Soft rematch only for the same person drifting slightly (new frameId).
+    // Keep this tight under exclusiveLock so a nearby stranger is never adopted.
     const activeAnchor = active.faceCenter ?? active.torsoCenter;
+    const maxDist = this.config.exclusiveLock
+      ? Math.min(0.14, this.config.lockMatchDistance)
+      : this.config.lockMatchDistance;
     let best: (PersonCandidate & { score: number }) | null = null;
-    let bestDist = 0.2;
+    let bestDist = maxDist;
 
     for (const c of ranked) {
       if (c.detectionConfidence < this.config.keepConfidence) continue;

@@ -230,6 +230,8 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           smoothingAlpha: lite ? 0.55 : 0.35,
           acquireHoldMs: lite ? 280 : 500,
           cooldownMs: lite ? 800 : 1500,
+          exclusiveLock: true,
+          missingGraceMs: 2800,
         }),
       );
     }
@@ -492,22 +494,28 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           });
           trackingSnapshotRef.current = snapshot;
 
+          // Only the locked guest's associated hand may drive the donut —
+          // never fall back to "any hand in frame" (steals in a crowd).
           let hand = null as ReturnType<typeof extractPrimaryHand>;
-          if (
-            snapshot.controllingHand &&
-            (snapshot.state === 'LOCKED' ||
-              snapshot.state === 'INTERACTING' ||
-              snapshot.state === 'COOLDOWN')
-          ) {
+          const locked =
+            snapshot.state === 'LOCKED' ||
+            snapshot.state === 'INTERACTING' ||
+            snapshot.state === 'COOLDOWN';
+
+          if (snapshot.controllingHand && locked) {
             const handIndex = Number(
               snapshot.controllingHand.id.split('_')[1] ?? 0,
             );
             hand = extractHandByIndex(results?.landmarks ?? [], handIndex);
-          }
-
-          // Never leave guests without a donut if a hand is clearly present.
-          if (!hand) {
-            hand = extractPrimaryHand(results?.landmarks ?? []);
+          } else if (!locked && snapshot.state === 'ACQUIRING') {
+            // During acquire, still prefer a hand near the acquiring subject
+            // if the associator already found one; otherwise wait for lock.
+            if (snapshot.controllingHand) {
+              const handIndex = Number(
+                snapshot.controllingHand.id.split('_')[1] ?? 0,
+              );
+              hand = extractHandByIndex(results?.landmarks ?? [], handIndex);
+            }
           }
 
           if (hand) {
