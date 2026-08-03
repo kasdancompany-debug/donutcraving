@@ -9,10 +9,10 @@ export const DONUT_OFFSET_X = 0;
 export const DONUT_OFFSET_Y = 6;
 
 /** Multiplier on thumb↔index pinch span for donut diameter (scales with hand size). */
-export const DONUT_SCALE_MULTIPLIER = 3.1;
+export const DONUT_SCALE_MULTIPLIER = 2.45;
 
 /** Fallback scale from index MCP to thumb tip (never uses wrist). */
-export const DONUT_PALM_SCALE_MULTIPLIER = 2.9;
+export const DONUT_PALM_SCALE_MULTIPLIER = 2.3;
 
 /** Added to the thumb→index grip angle (radians). Ignored when LOCK_DONUT_UPRIGHT is true. */
 export const DONUT_ROTATION_OFFSET = 0;
@@ -26,8 +26,8 @@ export const LOCK_DONUT_UPRIGHT = true;
 export const PALM_BLEND = 0.18;
 
 /** Scale bounds as a ratio of the shorter canvas edge (portrait/landscape safe). */
-export const MIN_SCALE_RATIO = 0.045;
-export const MAX_SCALE_RATIO = 0.34;
+export const MIN_SCALE_RATIO = 0.04;
+export const MAX_SCALE_RATIO = 0.28;
 
 /** Proximity threshold for idle → active (lower helps smaller hands / kids). */
 export const PROXIMITY_SCALE_RATIO = 0.055;
