@@ -128,8 +128,7 @@ body,
 }
 
 .attract-screen--wave {
-  cursor: default;
-  pointer-events: none;
+  cursor: pointer;
   background: linear-gradient(
     180deg,
     rgba(42, 24, 16, 0.62) 0%,

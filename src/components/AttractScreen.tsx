@@ -73,20 +73,16 @@ export function AttractScreen({ visible, onStart, subtext, waveMode = false }: A
     </>
   );
 
-  if (waveMode) {
-    return (
-      <div className="attract-screen attract-screen--wave" aria-label="Wave to begin">
-        {content}
-      </div>
-    );
-  }
-
   return (
     <button
       type="button"
-      className="attract-screen"
+      className={`attract-screen${waveMode ? ' attract-screen--wave' : ''}`}
       onClick={onStart}
-      aria-label="Begin the desire mirror experience"
+      aria-label={
+        waveMode
+          ? 'Wave your hand or tap to begin'
+          : 'Begin the desire mirror experience'
+      }
     >
       {content}
     </button>
