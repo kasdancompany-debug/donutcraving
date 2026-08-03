@@ -1,18 +1,14 @@
 export type CameraRotation = 0 | 90 | 180 | 270;
 
-export function parseCameraRotation(isKiosk: boolean): CameraRotation {
+/** Only rotate when explicitly requested — keeps the main URL on a smooth video underlay. */
+export function parseCameraRotation(_isKiosk = false): CameraRotation {
   const params = new URLSearchParams(window.location.search);
   const raw = params.get('camRotate');
 
-  if (raw === '0' || raw === 'off' || raw === 'none') return 0;
   if (raw === '90') return 90;
   if (raw === '180') return 180;
   if (raw === '270') return 270;
-
-  // Sideways USB webcams in portrait kiosk — default to 90° unless overridden.
-  if (raw === 'auto' || (isKiosk && !raw && window.innerHeight > window.innerWidth)) {
-    return 90;
-  }
+  if (raw === 'auto' && window.innerHeight > window.innerWidth) return 90;
 
   return 0;
 }

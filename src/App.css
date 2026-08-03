@@ -56,7 +56,8 @@ body,
   }
 }
 
-.hidden-video {
+.hidden-video,
+.camera-video--hidden {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -64,11 +65,30 @@ body,
   pointer-events: none;
 }
 
+/* Native video plane — browser composites independently while ML runs. */
+.camera-video--live {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  pointer-events: none;
+  background: #140a06;
+}
+
+.camera-video--mirror {
+  transform: scaleX(-1);
+}
+
 .mirror-canvas {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100vw;
   height: 100vh;
   object-fit: cover;
+  background: transparent;
 }
 
 /* --- Attract screen --- */

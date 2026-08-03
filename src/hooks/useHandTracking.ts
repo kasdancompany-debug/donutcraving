@@ -39,10 +39,10 @@ export function useHandTracking(options: UseHandTrackingOptions = {}) {
           delegate,
         },
         runningMode: 'VIDEO',
-        numHands: lite ? 2 : 4,
-        minHandDetectionConfidence: lite ? 0.5 : 0.55,
-        minHandPresenceConfidence: lite ? 0.5 : 0.55,
-        minTrackingConfidence: lite ? 0.5 : 0.55,
+        numHands: lite ? 1 : 2,
+        minHandDetectionConfidence: lite ? 0.45 : 0.55,
+        minHandPresenceConfidence: lite ? 0.45 : 0.55,
+        minTrackingConfidence: lite ? 0.45 : 0.55,
       });
     }
 
@@ -52,13 +52,6 @@ export function useHandTracking(options: UseHandTrackingOptions = {}) {
 
       try {
         const create = async () => {
-          if (lite) {
-            try {
-              return await createLandmarker('CPU');
-            } catch {
-              return createLandmarker('GPU');
-            }
-          }
           try {
             return await createLandmarker('GPU');
           } catch {

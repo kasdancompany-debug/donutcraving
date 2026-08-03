@@ -21,8 +21,17 @@ import { downloadCanvasScreenshot } from './utils/screenshot';
 import './App.css';
 
 function App() {
-  const { isKiosk, isLite, allowDebug, enableBite, trackIntervalMs, attractSubtext, camRotate, waveToStart } =
-    kioskProfile;
+  const {
+    isKiosk,
+    isLite,
+    allowDebug,
+    enableBite,
+    trackIntervalMs,
+    attractSubtext,
+    camRotate,
+    waveToStart,
+    enablePose,
+  } = kioskProfile;
 
   const [started, setStarted] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
@@ -38,11 +47,13 @@ function App() {
     retry: retryTracking,
   } = useHandTracking({ lite: isLite });
   const { status: faceStatus, detect: detectFace } = useFaceTracking({
-    enabled: true,
+    enabled: enableBite,
+    lite: isLite,
   });
   const { status: poseStatus, detect: detectPose } = usePoseTracking({
-    enabled: true,
+    enabled: enablePose,
     lite: isLite,
+    numPoses: 1,
   });
   const { isFullscreen, enter: enterFullscreen, toggle: toggleFullscreen } =
     useFullscreen();
@@ -180,10 +191,17 @@ function App() {
     [isLite, trackIntervalMs, enableBite],
   );
 
+  const useLiveVideoUnderlay = camRotate === 0;
+
   return (
     <div className={`app${isLite ? ' app--lite' : ''}${isKiosk ? ' app--kiosk' : ''}`}>
       {!isLite && <div className="film-grain" aria-hidden />}
-      <video ref={videoRef} className="hidden-video" playsInline muted />
+      <video
+        ref={videoRef}
+        className={`camera-video${useLiveVideoUnderlay ? ' camera-video--live camera-video--mirror' : ' camera-video--hidden'}`}
+        playsInline
+        muted
+      />
 
       {cameraStatus === 'ready' && (
         <MirrorCanvas
@@ -193,9 +211,9 @@ function App() {
           detectFace={detectFace}
           detectPose={detectPose}
           trackingReady={trackingStatus === 'ready'}
-          faceReady={faceStatus === 'ready'}
-          poseReady={poseStatus === 'ready' || poseStatus === 'disabled'}
-          faceStatus={faceStatus}
+          faceReady={enableBite && faceStatus === 'ready'}
+          poseReady={enablePose && (poseStatus === 'ready' || poseStatus === 'disabled')}
+          faceStatus={enableBite ? faceStatus : 'ready'}
           started={started}
           debugMode={allowDebug && debugMode}
           recalibrateToken={recalibrateToken}
@@ -204,6 +222,8 @@ function App() {
           waveToStart={waveToStart}
           onWaveStart={handleStart}
           onActivity={pingActivity}
+          videoUnderlay={useLiveVideoUnderlay}
+          lowLatencyFollow
         />
       )}
 
@@ -229,11 +249,7 @@ function App() {
       {isLoading && !hasError && (
         <div className="overlay">
           <p className="overlay-text">Awakening the mirror…</p>
-          <p className="overlay-subtext">
-            {isKiosk
-              ? 'Getting the camera ready…'
-              : 'Allow webcam access when prompted'}
-          </p>
+          <p className="overlay-subtext">Getting the camera ready…</p>
         </div>
       )}
 

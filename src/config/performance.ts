@@ -29,3 +29,6 @@ export const INIT_TIMEOUT_MS = 20_000;
 
 /** Soft hang detector: reload if the draw loop stops beating. */
 export const WATCHDOG_STALL_MS = 20_000;
+
+/** Keep last mouth pose across throttled track ticks so bite hold can accumulate. */
+export const MOUTH_CACHE_MS = 320;

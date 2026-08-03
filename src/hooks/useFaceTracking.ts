@@ -17,10 +17,13 @@ export type FaceTrackingStatus = 'loading' | 'ready' | 'error';
 
 interface UseFaceTrackingOptions {
   enabled?: boolean;
+  /** Cafe lite: one face is enough for bite and much cheaper. */
+  lite?: boolean;
 }
 
 export function useFaceTracking(options: UseFaceTrackingOptions = {}) {
   const enabled = options.enabled ?? true;
+  const lite = options.lite ?? false;
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
   const [status, setStatus] = useState<FaceTrackingStatus>(
     enabled ? 'loading' : 'ready',
@@ -47,10 +50,10 @@ export function useFaceTracking(options: UseFaceTrackingOptions = {}) {
           delegate,
         },
         runningMode: 'VIDEO',
-        numFaces: 4,
-        minFaceDetectionConfidence: 0.4,
-        minFacePresenceConfidence: 0.4,
-        minTrackingConfidence: 0.4,
+        numFaces: lite ? 1 : 2,
+        minFaceDetectionConfidence: lite ? 0.35 : 0.4,
+        minFacePresenceConfidence: lite ? 0.35 : 0.4,
+        minTrackingConfidence: lite ? 0.35 : 0.4,
       });
     }
 
@@ -61,9 +64,9 @@ export function useFaceTracking(options: UseFaceTrackingOptions = {}) {
       try {
         const create = async () => {
           try {
-            return await createLandmarker('CPU');
+            return await createLandmarker('GPU');
           } catch {
-            return createLandmarker('GPU');
+            return createLandmarker('CPU');
           }
         };
 
@@ -107,7 +110,7 @@ export function useFaceTracking(options: UseFaceTrackingOptions = {}) {
       landmarkerRef.current?.close();
       landmarkerRef.current = null;
     };
-  }, [enabled, retryToken]);
+  }, [enabled, lite, retryToken]);
 
   const detect = useCallback(
     (source: VisionFrameSource, timestamp: number): FaceLandmarkerResult | null => {

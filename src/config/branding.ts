@@ -12,11 +12,14 @@ export const BRAND_NAME = 'Kasdan Co.';
 export const APP_TITLE = 'Donut Mirror';
 
 /**
- * Donut image — swap this file to change the donut everywhere.
- * `public/assets/donut.png` (currently the Kasdan Vanilla Bean artwork).
- * Set USE_PROCEDURAL_DONUT = true in `src/utils/donutRenderer.ts` to use the built-in canvas donut instead.
+ * Primary donut — used in the live mirror experience.
+ * Blueberry glaze artwork in `public/assets/donut-blueberry.png`.
+ * Set USE_PROCEDURAL_DONUT = true in `src/utils/donutRenderer.ts` for the built-in canvas donut.
  */
-export const DONUT_IMAGE_PATH = '/assets/donut.png';
+export const DONUT_IMAGE_PATH = '/assets/donut-blueberry.png';
+
+/** Vanilla / white glaze — mixed with blueberry on the attract homescreen. */
+export const DONUT_WHITE_IMAGE_PATH = '/assets/donut.png';
 
 /** Kasdan logo shown in the lower-left corner. */
 export const KASDAN_LOGO_PATH = '/assets/kasdan-logo.png';

@@ -435,7 +435,7 @@ function cropCanvasToAlpha(source: HTMLCanvasElement): HTMLCanvasElement {
   return cropped;
 }
 
-let cachedProcessedDonut: HTMLCanvasElement | null = null;
+const processedDonutCache = new Map<string, HTMLCanvasElement>();
 
 export async function getProcessedDonutCanvas(
   imagePath: string,
@@ -443,11 +443,13 @@ export async function getProcessedDonutCanvas(
   if (USE_PROCEDURAL_DONUT) {
     return getPremiumDonutCanvas();
   }
-  if (!cachedProcessedDonut) {
-    const image = await loadDonutImage(imagePath);
-    cachedProcessedDonut = knockOutDarkBackground(image);
-  }
-  return cachedProcessedDonut;
+  const cached = processedDonutCache.get(imagePath);
+  if (cached) return cached;
+
+  const image = await loadDonutImage(imagePath);
+  const processed = knockOutDarkBackground(image);
+  processedDonutCache.set(imagePath, processed);
+  return processed;
 }
 
 export async function getDonutImageDataUrl(imagePath: string): Promise<string> {

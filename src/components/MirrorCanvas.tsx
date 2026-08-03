@@ -49,7 +49,6 @@ import {
   type WaveDetectorState,
 } from '../utils/waveDetection';
 import { createBiteExplosion, drawBiteExplosion, type BiteExplosion } from '../utils/biteEffects';
-import { extractMouthPose } from '../utils/faceMath';
 import { drawHandDebug } from '../utils/handDebug';
 import {
   renderCorrectedVideoFrame,
@@ -62,6 +61,7 @@ import {
   LITE_POSITION_SMOOTHING,
   LITE_POSITION_SMOOTHING_FAST,
   ATTRACT_TRACK_INTERVAL_MS,
+  MOUTH_CACHE_MS,
 } from '../config/performance';
 import { resolveMirrorMode } from '../utils/mirrorState';
 import {
@@ -71,10 +71,12 @@ import {
   type DonutTransform,
 } from '../utils/smoothing';
 import { beatWatchdog } from '../utils/kioskWatchdog';
+import { extractMouthPose, type MouthPose } from '../utils/faceMath';
 import {
   SubjectTracker,
   createTrackingConfig,
   buildPeopleCandidates,
+  peopleFromHands,
   handsFromLandmarks,
   facesFromLandmarks,
   poseFromLandmarks,
@@ -204,6 +206,8 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     const ambientRef = useRef(createAmbientParticles());
     const cachedTargetRef = useRef<DonutTransform>({ ...DEFAULT_TRANSFORM });
     const cachedPoseRef = useRef<HandPose | null>(null);
+    const cachedMouthRef = useRef<{ pose: MouthPose; at: number } | null>(null);
+    const faceTickRef = useRef(0);
     const biteStateRef = useRef<BiteDetectorState>(createBiteDetectorState());
     const explosionRef = useRef<BiteExplosion | null>(null);
     const onActivityRef = useRef(onActivity);
@@ -223,7 +227,9 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     if (!subjectTrackerRef.current) {
       subjectTrackerRef.current = new SubjectTracker(
         createTrackingConfig({
-          smoothingAlpha: lite ? 0.42 : 0.35,
+          smoothingAlpha: lite ? 0.55 : 0.35,
+          acquireHoldMs: lite ? 280 : 500,
+          cooldownMs: lite ? 800 : 1500,
         }),
       );
     }
@@ -301,6 +307,9 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       wasInteractingRef.current = false;
       trackingSnapshotRef.current = null;
       lastMediaTsRef.current = -1;
+      cachedMouthRef.current = null;
+      cachedPoseRef.current = null;
+      cachedTargetRef.current = { ...DEFAULT_TRANSFORM };
     }, [recalibrateToken]);
 
     useEffect(() => {
@@ -397,11 +406,6 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
             lastMediaTsRef.current = mediaTimestamp;
           }
 
-          // Paint the camera/video frame first so the display stays smooth even if ML is slow.
-          if (!videoUnderlay && !previewMode) {
-            // Defer full scene draw until after tracking — handled below.
-          }
-
           if (previewMode) {
             const shouldTrackPreview =
               trackingReady &&
@@ -419,16 +423,18 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
             }
 
             ctx.clearRect(0, 0, width, height);
-            drawVideoCover(
-              ctx,
-              frameSource,
-              frameWidth,
-              frameHeight,
-              width,
-              height,
-              0.4,
-              mirrorCover,
-            );
+            if (!videoUnderlay) {
+              drawVideoCover(
+                ctx,
+                frameSource,
+                frameWidth,
+                frameHeight,
+                width,
+                height,
+                0.4,
+                mirrorCover,
+              );
+            }
             drawIdleVignette(ctx, width, height, 0.82);
             drawCinematicVignette(ctx, width, height, 0.45);
             frameId = requestAnimationFrame(draw);
@@ -437,7 +443,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
 
         let targetTransform: DonutTransform = { ...DEFAULT_TRANSFORM };
         let mode: 'idle' | 'active' = 'idle';
-        let mouthPose = null;
+        let mouthPose: MouthPose | null = null;
         let handDetected = false;
 
         if (shouldTrack) {
@@ -445,11 +451,17 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           const inferStart = globalThis.performance.now();
 
           const results = detect(frameSource, mediaTimestamp);
-          // Face mesh is expensive — only when bite is on.
-          const faceResults =
-            enableBite && faceReady
-              ? detectFace(frameSource, mediaTimestamp)
-              : null;
+
+          // Face is cheaper than pose — run every other tick in lite.
+          faceTickRef.current += 1;
+          const runFace =
+            enableBite &&
+            faceReady &&
+            (!lite || faceTickRef.current % 2 === 0);
+          const faceResults = runFace
+            ? detectFace(frameSource, mediaTimestamp)
+            : null;
+
           const poseResults = poseReady
             ? detectPose(frameSource, mediaTimestamp)
             : null;
@@ -464,7 +476,10 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
             poses.length > 0 ? poses : lastPoseLandmarksRef.current;
           const faces = facesFromLandmarks(faceResults?.faceLandmarks ?? []);
           const hands = handsFromLandmarks(results?.landmarks ?? []);
-          const people = buildPeopleCandidates(posesForPeople, faces);
+          let people = buildPeopleCandidates(posesForPeople, faces);
+          if (people.length === 0 && hands.length > 0) {
+            people = peopleFromHands(hands);
+          }
 
           const tracker = subjectTrackerRef.current!;
           const snapshot = tracker.update({
@@ -477,7 +492,6 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           });
           trackingSnapshotRef.current = snapshot;
 
-          // Resolve controlling hand → canvas donut pose (active subject only).
           let hand = null as ReturnType<typeof extractPrimaryHand>;
           if (
             snapshot.controllingHand &&
@@ -485,8 +499,15 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
               snapshot.state === 'INTERACTING' ||
               snapshot.state === 'COOLDOWN')
           ) {
-            const handIndex = Number(snapshot.controllingHand.id.split('_')[1] ?? 0);
+            const handIndex = Number(
+              snapshot.controllingHand.id.split('_')[1] ?? 0,
+            );
             hand = extractHandByIndex(results?.landmarks ?? [], handIndex);
+          }
+
+          // Never leave guests without a donut if a hand is clearly present.
+          if (!hand) {
+            hand = extractPrimaryHand(results?.landmarks ?? []);
           }
 
           if (hand) {
@@ -523,14 +544,17 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
             wasInteractingRef.current = false;
           }
 
-          if (enableBite && faceReady) {
+          if (enableBite && faceReady && faceResults) {
             let faceIndex = 0;
             if (snapshot.activeSubject?.faceCenter && faces.length > 1) {
               const anchor = snapshot.activeSubject.faceCenter;
               let best = 0;
               let bestDist = Infinity;
               faces.forEach((face, index) => {
-                const d = Math.hypot(face.center.x - anchor.x, face.center.y - anchor.y);
+                const d = Math.hypot(
+                  face.center.x - anchor.x,
+                  face.center.y - anchor.y,
+                );
                 if (d < bestDist) {
                   bestDist = d;
                   best = index;
@@ -538,8 +562,8 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
               });
               faceIndex = best;
             }
-            mouthPose = extractMouthPose(
-              faceResults?.faceLandmarks ?? [],
+            const detectedMouth = extractMouthPose(
+              faceResults.faceLandmarks ?? [],
               width,
               height,
               frameWidth,
@@ -547,17 +571,34 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
               mirrorLandmarks,
               faceIndex,
             );
+            if (detectedMouth) {
+              cachedMouthRef.current = { pose: detectedMouth, at: timestamp };
+              mouthPose = detectedMouth;
+            } else {
+              const prev = cachedMouthRef.current;
+              if (prev && timestamp - prev.at <= MOUTH_CACHE_MS) {
+                mouthPose = prev.pose;
+              } else {
+                cachedMouthRef.current = null;
+              }
+            }
+          } else {
+            const prev = cachedMouthRef.current;
+            if (prev && timestamp - prev.at <= MOUTH_CACHE_MS) {
+              mouthPose = prev.pose;
+            }
           }
 
           fpsRef.current.inferMs = globalThis.performance.now() - inferStart;
           onInferenceSampleRef.current?.(fpsRef.current.inferMs, mediaTimestamp);
-        } else if (trackingReady) {
-          targetTransform = cachedTargetRef.current;
-          mode = targetTransform.visible ? 'active' : 'idle';
-          handDetected = cachedPoseRef.current !== null;
         } else {
           targetTransform = cachedTargetRef.current;
           mode = targetTransform.visible ? 'active' : 'idle';
+          handDetected = cachedPoseRef.current !== null;
+          const prev = cachedMouthRef.current;
+          if (prev && timestamp - prev.at <= MOUTH_CACHE_MS) {
+            mouthPose = prev.pose;
+          }
         }
 
         if (enableBite) {
@@ -650,6 +691,11 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
             idleBlend,
             mirrorCover,
           );
+        } else if (idleBlend > 0.02) {
+          ctx.save();
+          ctx.fillStyle = `rgba(42, 24, 16, ${idleBlend * 0.38})`;
+          ctx.fillRect(0, 0, width, height);
+          ctx.restore();
         }
 
         if (!lite && !videoUnderlay) {
@@ -669,10 +715,8 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           drawIdlePulse(ctx, width, height, timestamp, idleBlend);
         }
 
-        if (!videoUnderlay) {
-          drawIdleVignette(ctx, width, height, idleBlend);
-          drawIdleHint(ctx, width, height, timestamp, idleBlend);
-        }
+        drawIdleVignette(ctx, width, height, idleBlend);
+        drawIdleHint(ctx, width, height, timestamp, idleBlend);
 
         if (
           showDonut &&
@@ -749,9 +793,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         }
 
         drawDesireText(ctx, width, height, timestamp, activeBlend);
-        if (!videoUnderlay) {
-          drawCinematicVignette(ctx, width, height, lite ? 0.34 : 0.42);
-        }
+        drawCinematicVignette(ctx, width, height, lite ? 0.34 : 0.42);
 
         if (!lite && !videoUnderlay) {
           drawFilmGrain(ctx, width, height, timestamp);

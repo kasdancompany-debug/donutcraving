@@ -4,7 +4,7 @@ import {
   ATTRACT_SUBTEXT,
   ATTRACT_SUBTEXT_WAVE,
 } from '../config/branding';
-import { useDonutImageSrc } from '../hooks/useDonutImage';
+import { useAttractDonutSources } from '../hooks/useDonutImage';
 import { QRCodePanel } from './QRCodePanel';
 
 interface AttractScreenProps {
@@ -15,28 +15,33 @@ interface AttractScreenProps {
 }
 
 const FLOATING_DONUTS = [
-  { left: '6%', top: '10%', size: 118, duration: 6.5, delay: 0, rotate: -14, drift: 1.15 },
-  { left: '80%', top: '6%', size: 52, duration: 8.2, delay: 1.1, rotate: 22, drift: 0.85 },
-  { left: '88%', top: '48%', size: 96, duration: 7.4, delay: 0.4, rotate: -10, drift: 1 },
-  { left: '3%', top: '58%', size: 74, duration: 9.1, delay: 1.8, rotate: 16, drift: 0.9 },
-  { left: '44%', top: '2%', size: 42, duration: 5.8, delay: 0.2, rotate: 8, drift: 1.2 },
-  { left: '58%', top: '76%', size: 132, duration: 7.8, delay: 1.3, rotate: -18, drift: 1.05 },
-  { left: '18%', top: '80%', size: 58, duration: 6.9, delay: 0.7, rotate: 12, drift: 0.95 },
-  { left: '72%', top: '28%', size: 38, duration: 8.6, delay: 2.1, rotate: -6, drift: 1.1 },
+  { left: '6%', top: '10%', size: 118, duration: 6.5, delay: 0, rotate: -14, drift: 1.15, variant: 'blueberry' },
+  { left: '80%', top: '6%', size: 52, duration: 8.2, delay: 1.1, rotate: 22, drift: 0.85, variant: 'white' },
+  { left: '88%', top: '48%', size: 96, duration: 7.4, delay: 0.4, rotate: -10, drift: 1, variant: 'blueberry' },
+  { left: '3%', top: '58%', size: 74, duration: 9.1, delay: 1.8, rotate: 16, drift: 0.9, variant: 'white' },
+  { left: '44%', top: '2%', size: 42, duration: 5.8, delay: 0.2, rotate: 8, drift: 1.2, variant: 'blueberry' },
+  { left: '58%', top: '76%', size: 132, duration: 7.8, delay: 1.3, rotate: -18, drift: 1.05, variant: 'white' },
+  { left: '18%', top: '80%', size: 58, duration: 6.9, delay: 0.7, rotate: 12, drift: 0.95, variant: 'blueberry' },
+  { left: '72%', top: '28%', size: 38, duration: 8.6, delay: 2.1, rotate: -6, drift: 1.1, variant: 'white' },
 ] as const;
 
 export function AttractScreen({ visible, onStart, subtext, waveMode = false }: AttractScreenProps) {
-  const donutSrc = useDonutImageSrc();
+  const donutSources = useAttractDonutSources();
 
   if (!visible) return null;
 
   const content = (
     <>
-      {donutSrc &&
-        FLOATING_DONUTS.map((donut, index) => (
+      {FLOATING_DONUTS.map((donut, index) => {
+        const src =
+          donut.variant === 'blueberry'
+            ? donutSources.blueberry
+            : donutSources.white;
+        if (!src) return null;
+        return (
           <img
             key={index}
-            src={donutSrc}
+            src={src}
             alt=""
             aria-hidden
             className="attract-floating-donut"
@@ -51,7 +56,8 @@ export function AttractScreen({ visible, onStart, subtext, waveMode = false }: A
               ['--donut-drift' as string]: String(donut.drift),
             }}
           />
-        ))}
+        );
+      })}
 
       <div className="attract-content">
         <p className="attract-eyebrow">{ATTRACT_EYEBROW}</p>

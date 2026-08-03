@@ -22,6 +22,7 @@ export {
 } from './TrackingDebugOverlay';
 export {
   buildPeopleCandidates,
+  peopleFromHands,
   handsFromLandmarks,
   facesFromLandmarks,
   poseFromLandmarks,

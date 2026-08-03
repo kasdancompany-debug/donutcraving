@@ -201,3 +201,25 @@ export function facesFromLandmarks(
     };
   });
 }
+
+/** When pose/face are cold, treat the strongest hand as a person so control never stalls. */
+export function peopleFromHands(hands: HandObservation[]): PersonCandidate[] {
+  return hands.map((hand, index) => {
+    const faceCenter = {
+      x: hand.wrist.x,
+      y: Math.max(0.05, hand.wrist.y - 0.18),
+    };
+    return {
+      frameId: `hand_person_${index}`,
+      box: boxFromPoints([hand.wrist, hand.center, faceCenter], 0.1),
+      faceCenter,
+      torsoCenter: hand.center,
+      pose: null,
+      detectionConfidence: hand.confidence,
+      faceVisible: false,
+      poseVisible: false,
+      visibleMs: 0,
+      distanceFromActive: 0,
+    };
+  });
+}

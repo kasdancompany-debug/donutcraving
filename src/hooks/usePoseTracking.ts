@@ -24,7 +24,7 @@ interface UsePoseTrackingOptions {
 export function usePoseTracking(options: UsePoseTrackingOptions = {}) {
   const enabled = options.enabled ?? true;
   const lite = options.lite ?? false;
-  const numPoses = options.numPoses ?? (lite ? 3 : 4);
+  const numPoses = options.numPoses ?? (lite ? 1 : 4);
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
   const [status, setStatus] = useState<PoseTrackingStatus>(
     enabled ? 'loading' : 'disabled',
