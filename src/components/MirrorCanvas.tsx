@@ -737,12 +737,11 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
 
           if (USE_PROCEDURAL_DONUT) {
             drawAura(ctx, x, y, drawHeight * 0.55, timestamp, donutAlpha);
-          } else {
-            drawAura(ctx, x, y, drawHeight * 0.5, timestamp, donutAlpha * 0.35);
           }
 
           ctx.save();
-          ctx.globalAlpha = donutAlpha;
+          // Solid cartoon sticker — no ghosting once the donut is fully active.
+          ctx.globalAlpha = Math.min(1, donutAlpha < 0.92 ? donutAlpha : 1);
           ctx.translate(x, y);
           ctx.rotate(rotation);
           ctx.drawImage(

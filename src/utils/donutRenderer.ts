@@ -360,11 +360,15 @@ export function loadDonutImage(imagePath: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Remove near-black backdrop with soft edges, then crop empty margins. */
+/**
+ * Remove a flat black/near-black studio backdrop, then crop empty margins.
+ * Preserves dark saturated colors (e.g. blueberry glaze) so the donut stays
+ * solid and cartoon-opaque instead of going see-through.
+ */
 export function knockOutDarkBackground(
   image: HTMLImageElement,
-  threshold = 50,
-  feather = 70,
+  threshold = 28,
+  feather = 22,
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = image.naturalWidth;
@@ -380,13 +384,22 @@ export function knockOutDarkBackground(
     const r = data[i];
     const g = data[i + 1];
     const b = data[i + 2];
-    const luminance = Math.max(r, g, b);
+    const alpha = data[i + 3];
+    if (alpha === 0) continue;
 
-    if (luminance <= threshold) {
+    const luminance = Math.max(r, g, b);
+    const chroma = Math.max(Math.abs(r - g), Math.abs(g - b), Math.abs(r - b));
+    // True backdrop is near-black and nearly gray — not purple/brown glaze.
+    const isBackdrop = chroma <= 18;
+
+    if (isBackdrop && luminance <= threshold) {
       data[i + 3] = 0;
-    } else if (luminance < threshold + feather) {
+    } else if (isBackdrop && luminance < threshold + feather) {
       const edge = (luminance - threshold) / feather;
-      data[i + 3] = Math.round(data[i + 3] * edge);
+      data[i + 3] = Math.round(alpha * edge);
+    } else if (alpha > 20) {
+      // Harden the cartoon body to fully opaque (no ghostly feathering).
+      data[i + 3] = 255;
     }
   }
 
