@@ -92,6 +92,24 @@ export class HandAssociator {
       return true;
     }
 
+    // Face-only lock (no pose): allow a raised/held hand in front of the guest.
+    const face = subject.faceCenter;
+    if (face) {
+      const dx = Math.abs(hand.wrist.x - face.x);
+      const dy = hand.wrist.y - face.y;
+      if (dx <= 0.28 && dy >= -0.08 && dy <= 0.55) {
+        return true;
+      }
+      if (distance(hand.wrist, face) <= 0.42) {
+        return true;
+      }
+    }
+
+    const torso = subject.torsoCenter;
+    if (torso && distance(hand.wrist, torso) <= 0.38) {
+      return true;
+    }
+
     // Match previously associated hand position.
     for (const prev of [subject.leftHand, subject.rightHand]) {
       if (prev && distance(hand.wrist, prev.wrist) <= this.config.handMatchProximity) {

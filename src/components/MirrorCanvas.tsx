@@ -85,6 +85,7 @@ import {
   type TrackingConfig,
   type TrackingEvent,
   type PoseLandmarksNorm,
+  type FaceObservation,
 } from '../tracking';
 
 const BLEND_SMOOTHING = 0.1;
@@ -217,6 +218,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     const lastMediaTsRef = useRef(-1);
     const lastTrackTimeRef = useRef(0);
     const lastPoseLandmarksRef = useRef<PoseLandmarksNorm[]>([]);
+    const lastFacesRef = useRef<FaceObservation[]>([]);
     const waveDetectorRef = useRef<WaveDetectorState>(createWaveDetectorState());
     const processingCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const subjectTrackerRef = useRef<SubjectTracker | null>(null);
@@ -312,6 +314,8 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       cachedMouthRef.current = null;
       cachedPoseRef.current = null;
       cachedTargetRef.current = { ...DEFAULT_TRANSFORM };
+      lastFacesRef.current = [];
+      lastPoseLandmarksRef.current = [];
     }, [recalibrateToken]);
 
     useEffect(() => {
@@ -476,7 +480,12 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           }
           const posesForPeople =
             poses.length > 0 ? poses : lastPoseLandmarksRef.current;
-          const faces = facesFromLandmarks(faceResults?.faceLandmarks ?? []);
+          const freshFaces = facesFromLandmarks(faceResults?.faceLandmarks ?? []);
+          if (freshFaces.length > 0) {
+            lastFacesRef.current = freshFaces;
+          }
+          const faces =
+            freshFaces.length > 0 ? freshFaces : lastFacesRef.current;
           const hands = handsFromLandmarks(results?.landmarks ?? []);
           let people = buildPeopleCandidates(posesForPeople, faces);
           if (people.length === 0 && hands.length > 0) {
@@ -494,28 +503,52 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           });
           trackingSnapshotRef.current = snapshot;
 
-          // Only the locked guest's associated hand may drive the donut —
-          // never fall back to "any hand in frame" (steals in a crowd).
+          // Prefer the locked guest's associated hand. If association misses
+          // (common with face-only lock + raised hand), fall back to the hand
+          // nearest that guest — never a random other person across the frame.
           let hand = null as ReturnType<typeof extractPrimaryHand>;
           const locked =
             snapshot.state === 'LOCKED' ||
             snapshot.state === 'INTERACTING' ||
             snapshot.state === 'COOLDOWN';
+          const landmarkSets = results?.landmarks ?? [];
 
-          if (snapshot.controllingHand && locked) {
+          if (snapshot.controllingHand) {
             const handIndex = Number(
               snapshot.controllingHand.id.split('_')[1] ?? 0,
             );
-            hand = extractHandByIndex(results?.landmarks ?? [], handIndex);
-          } else if (!locked && snapshot.state === 'ACQUIRING') {
-            // During acquire, still prefer a hand near the acquiring subject
-            // if the associator already found one; otherwise wait for lock.
-            if (snapshot.controllingHand) {
-              const handIndex = Number(
-                snapshot.controllingHand.id.split('_')[1] ?? 0,
-              );
-              hand = extractHandByIndex(results?.landmarks ?? [], handIndex);
+            hand = extractHandByIndex(landmarkSets, handIndex);
+          }
+
+          if (!hand && locked && snapshot.activeSubject && landmarkSets.length > 0) {
+            const anchor =
+              snapshot.activeSubject.faceCenter ??
+              snapshot.activeSubject.torsoCenter;
+            if (landmarkSets.length === 1) {
+              hand = extractHandByIndex(landmarkSets, 0);
+            } else if (anchor) {
+              let bestIndex = 0;
+              let bestDist = Infinity;
+              landmarkSets.forEach((lm, index) => {
+                const wrist = lm[0];
+                if (!wrist) return;
+                const d = Math.hypot(wrist.x - anchor.x, wrist.y - anchor.y);
+                if (d < bestDist) {
+                  bestDist = d;
+                  bestIndex = index;
+                }
+              });
+              // Ignore hands clearly belonging to someone else across the frame.
+              if (bestDist <= 0.55) {
+                hand = extractHandByIndex(landmarkSets, bestIndex);
+              }
             }
+          }
+
+          // Before lock completes, still show a donut for a clear single hand
+          // so the experience doesn't feel dead while acquiring.
+          if (!hand && !locked && landmarkSets.length === 1) {
+            hand = extractHandByIndex(landmarkSets, 0);
           }
 
           if (hand) {

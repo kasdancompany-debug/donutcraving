@@ -92,11 +92,14 @@ export class CandidateScorer {
   /** Reject candidates that are too small to be a real guest. */
   isViable(candidate: PersonCandidate, forAcquire: boolean): boolean {
     const area = boxArea(candidate.box);
-    if (area < this.config.minBodyArea * (forAcquire ? 1 : 0.7)) return false;
+    if (area < this.config.minBodyArea * (forAcquire ? 1 : 0.7)) {
+      // Hand-proxy people have smaller boxes — allow a softer floor.
+      if (!(candidate.faceVisible && area >= this.config.minBodyArea * 0.35)) {
+        return false;
+      }
+    }
 
-    if (candidate.faceVisible) {
-      // Face box approximated from body if no separate face area — use presence only.
-    } else if (!candidate.poseVisible) {
+    if (!candidate.faceVisible && !candidate.poseVisible) {
       return false;
     }
 
