@@ -51,7 +51,11 @@ export const ATTRACT_SUBTEXT_WAVE = 'Wave your hand to begin';
 /** Shown while idle — hand not close enough or not detected. */
 export const IDLE_HINT_TEXT = 'Step closer to reveal your craving';
 
-/** Fades in when the user is holding the donut. */
+/**
+ * Legacy single-flavor copy — superseded by the per-flavor desireLabel in
+ * `src/config/donutFlavors.ts` ("You desire… the {desireLabel}.").
+ * Kept only as a reference for the phrasing pattern.
+ */
 export const DESIRE_TEXT = 'You desire… the perfect donut.';
 
 // --- Kiosk chrome ---
@@ -62,7 +66,7 @@ export const FULLSCREEN_PROMPT_HINT = 'Press F or tap the button below';
 
 /** Shown subtly on the attract screen; hidden during the live mirror. */
 export const KEYBOARD_HINTS =
-  'F · Fullscreen   ·   D · Debug   ·   R · Recalibrate   ·   S · Screenshot';
+  'F · Fullscreen   ·   D · Debug   ·   R · Recalibrate   ·   S · Screenshot   ·   C · Switch camera';
 
 /** Prefix for downloaded screenshot files (timestamp appended automatically). */
 export const SCREENSHOT_FILENAME_PREFIX = 'donut-mirror';

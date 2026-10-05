@@ -1,4 +1,4 @@
-import { BRAND_NAME, DESIRE_TEXT, IDLE_HINT_TEXT } from '../config/branding';
+import { BRAND_NAME, IDLE_HINT_TEXT } from '../config/branding';
 import { COLORS, rgba, serifFont, sansFont } from '../config/theme';
 
 export interface Sparkle {
@@ -204,6 +204,7 @@ export function drawDesireText(
   height: number,
   time: number,
   blend: number,
+  text: string,
 ) {
   if (blend <= 0.02) return;
 
@@ -218,7 +219,6 @@ export function drawDesireText(
   const fontSize = Math.max(28, Math.min(width * 0.052, 64));
   ctx.font = serifFont(fontSize, 600, true);
 
-  const text = DESIRE_TEXT;
   const textY = height * 0.11;
 
   ctx.shadowColor = rgba(COLORS.creamLight, 0.92 * alpha);

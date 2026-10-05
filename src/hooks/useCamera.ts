@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FULL_CAMERA, INIT_TIMEOUT_MS, LITE_CAMERA } from '../config/performance';
+import { logKioskEvent } from '../utils/kioskEventLog';
 import { withTimeout } from '../utils/withTimeout';
 
 export type CameraStatus = 'idle' | 'requesting' | 'ready' | 'error';
@@ -58,17 +59,61 @@ function isPermissionDenied(err: unknown): boolean {
 /** Brief pause so the OS releases the camera after the previous stream stops. */
 const RELEASE_DELAY_MS = 350;
 
-async function requestVideoStream(lite: boolean): Promise<MediaStream> {
+/**
+ * A cafe PC can have more than one video input (built-in webcam + USB cam),
+ * and Windows/Chrome can silently swap which one is "default" after a
+ * reboot or driver update. Pin to whichever device actually worked last
+ * time instead of re-resolving facingMode on every launch.
+ */
+const DEVICE_ID_STORAGE_KEY = 'donut-mirror:camera-device-id';
+
+function getStoredDeviceId(): string | null {
+  try {
+    return window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setStoredDeviceId(deviceId: string | null): void {
+  try {
+    if (deviceId) {
+      window.localStorage.setItem(DEVICE_ID_STORAGE_KEY, deviceId);
+    } else {
+      window.localStorage.removeItem(DEVICE_ID_STORAGE_KEY);
+    }
+  } catch {
+    // Best-effort — losing the pin just means the next launch re-resolves.
+  }
+}
+
+async function requestVideoStream(
+  lite: boolean,
+  preferredDeviceId: string | null,
+): Promise<MediaStream> {
   const profile = lite ? LITE_CAMERA : FULL_CAMERA;
+  const baseVideo = {
+    width: profile.width,
+    height: profile.height,
+    frameRate: profile.frameRate,
+  };
+
+  if (preferredDeviceId) {
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: { ...baseVideo, deviceId: { exact: preferredDeviceId } },
+        audio: false,
+      });
+    } catch {
+      // Pinned camera is gone (unplugged / re-enumerated after reboot) —
+      // fall through and re-resolve a default device below.
+      logKioskEvent('camera_pinned_device_unavailable', preferredDeviceId);
+    }
+  }
 
   try {
     return await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: 'user',
-        width: profile.width,
-        height: profile.height,
-        frameRate: profile.frameRate,
-      },
+      video: { ...baseVideo, facingMode: 'user' },
       audio: false,
     });
   } catch {
@@ -115,7 +160,7 @@ export function useCamera(options: UseCameraOptions = {}) {
 
     try {
       const stream = await withTimeout(
-        requestVideoStream(lite),
+        requestVideoStream(lite, getStoredDeviceId()),
         INIT_TIMEOUT_MS,
         'Camera timed out while starting.',
       );
@@ -139,6 +184,7 @@ export function useCamera(options: UseCameraOptions = {}) {
       const track = stream.getVideoTracks()[0];
       const onTrackEnded = () => {
         if (sessionRef.current === session) {
+          logKioskEvent('camera_track_ended');
           void startCamera(true);
         }
       };
@@ -161,13 +207,19 @@ export function useCamera(options: UseCameraOptions = {}) {
         width: video.videoWidth,
         height: video.videoHeight,
       });
+      // Pin whichever device actually ended up live, so a later OS
+      // default-camera swap can't silently redirect tracking.
+      const resolvedDeviceId = track?.getSettings().deviceId;
+      if (resolvedDeviceId) setStoredDeviceId(resolvedDeviceId);
       setStatus('ready');
     } catch (err) {
       if (session !== sessionRef.current) return;
       stopStream(streamRef.current);
       streamRef.current = null;
-      setError(friendlyCameraError(err));
+      const message = friendlyCameraError(err);
+      setError(message);
       setStatus('error');
+      logKioskEvent('camera_error', message);
 
       if (!isPermissionDenied(err)) {
         const delay = Math.min(30_000, 5_000 * 2 ** autoRetryAttemptRef.current);
@@ -240,11 +292,39 @@ export function useCamera(options: UseCameraOptions = {}) {
     void startCamera(true);
   }, [startCamera]);
 
+  /** Staff escape hatch (?debug=1, 'C' key): step to the next video input. */
+  const cycleCamera = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+      if (videoInputs.length < 2) return;
+
+      const currentId =
+        streamRef.current?.getVideoTracks()[0]?.getSettings().deviceId ??
+        getStoredDeviceId();
+      const currentIndex = videoInputs.findIndex(
+        (d) => d.deviceId === currentId,
+      );
+      const next = videoInputs[(currentIndex + 1) % videoInputs.length];
+
+      setStoredDeviceId(next.deviceId);
+      logKioskEvent('camera_device_switched', next.label || next.deviceId);
+      autoRetryAttemptRef.current = 0;
+      await startCamera(true);
+    } catch (err) {
+      logKioskEvent(
+        'camera_enumerate_error',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }, [startCamera]);
+
   return {
     videoRef,
     status,
     error,
     dimensions,
     retry,
+    cycleCamera,
   };
 }

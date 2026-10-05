@@ -6,7 +6,11 @@ import {
   type RefObject,
 } from 'react';
 import type { FaceLandmarkerResult, HandLandmarkerResult, PoseLandmarkerResult } from '@mediapipe/tasks-vision';
-import { DONUT_IMAGE_PATH } from '../config/branding';
+import {
+  DONUT_FLAVORS,
+  getDefaultFlavor,
+  pickRandomFlavor,
+} from '../config/donutFlavors';
 import { USE_PROCEDURAL_DONUT, resolveDonutDrawable } from '../utils/donutRenderer';
 import {
   createAmbientParticles,
@@ -71,6 +75,7 @@ import {
   type DonutTransform,
 } from '../utils/smoothing';
 import { beatWatchdog } from '../utils/kioskWatchdog';
+import { summarizeKioskLog } from '../utils/kioskEventLog';
 import { extractMouthPose, type MouthPose } from '../utils/faceMath';
 import {
   SubjectTracker,
@@ -202,7 +207,9 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     const transformRef = useRef<DonutTransform>({ ...DEFAULT_TRANSFORM });
     const activeBlendRef = useRef(0);
     const idleBlendRef = useRef(1);
-    const donutDrawableRef = useRef<CanvasImageSource | null>(null);
+    const donutDrawablesRef = useRef<Map<string, CanvasImageSource>>(new Map());
+    const flavorMapRef = useRef<Map<string, string>>(new Map());
+    const lastFlavorIdRef = useRef<string | null>(null);
     const sparklesRef = useRef(createSparkles());
     const ambientRef = useRef(createAmbientParticles());
     const cachedTargetRef = useRef<DonutTransform>({ ...DEFAULT_TRANSFORM });
@@ -225,6 +232,7 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
     const trackingSnapshotRef = useRef<TrackingSnapshot | null>(null);
     const wasInteractingRef = useRef(false);
     const fpsRef = useRef({ lastTs: 0, fps: 0, inferMs: 0 });
+    const kioskHealthRef = useRef({ text: '', at: 0 });
     const { lite, trackIntervalMs, enableBite } = performance;
     if (!subjectTrackerRef.current) {
       subjectTrackerRef.current = new SubjectTracker(
@@ -281,6 +289,12 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
 
     useEffect(() => {
       subjectTrackerRef.current?.setEventListener((event) => {
+        if (event.type === 'subject_locked' && event.subjectId) {
+          const loadedIds = new Set(donutDrawablesRef.current.keys());
+          const flavor = pickRandomFlavor(lastFlavorIdRef.current, loadedIds);
+          flavorMapRef.current.set(event.subjectId, flavor.id);
+          lastFlavorIdRef.current = flavor.id;
+        }
         onTrackingEventRef.current?.(event);
       });
       return () => subjectTrackerRef.current?.setEventListener(null);
@@ -316,20 +330,32 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
       cachedTargetRef.current = { ...DEFAULT_TRANSFORM };
       lastFacesRef.current = [];
       lastPoseLandmarksRef.current = [];
+      flavorMapRef.current.clear();
     }, [recalibrateToken]);
 
     useEffect(() => {
       let cancelled = false;
 
-      void resolveDonutDrawable(DONUT_IMAGE_PATH).then((drawable) => {
-        if (!cancelled) {
-          donutDrawableRef.current = drawable;
+      void Promise.allSettled(
+        DONUT_FLAVORS.map(async (flavor) => {
+          const drawable = await resolveDonutDrawable(flavor.imagePath);
+          return [flavor.id, drawable] as const;
+        }),
+      ).then((results) => {
+        if (cancelled) return;
+        const loaded = new Map<string, CanvasImageSource>();
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            const [id, drawable] = result.value;
+            loaded.set(id, drawable);
+          }
         }
+        donutDrawablesRef.current = loaded;
       });
 
       return () => {
         cancelled = true;
-        donutDrawableRef.current = null;
+        donutDrawablesRef.current = new Map();
       };
     }, []);
 
@@ -702,7 +728,17 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
         const activeBlend = activeBlendRef.current;
         const idleBlend = idleBlendRef.current;
         const donut = transformRef.current;
-        const donutDrawable = donutDrawableRef.current;
+        const activeTrackingId = trackingSnapshotRef.current?.activeSubject?.trackingId;
+        const activeFlavorId =
+          (activeTrackingId && flavorMapRef.current.get(activeTrackingId)) ||
+          getDefaultFlavor().id;
+        const activeFlavor =
+          DONUT_FLAVORS.find((flavor) => flavor.id === activeFlavorId) ??
+          getDefaultFlavor();
+        const donutDrawable =
+          donutDrawablesRef.current.get(activeFlavorId) ??
+          donutDrawablesRef.current.get(getDefaultFlavor().id) ??
+          null;
         const bitePhase = biteStateRef.current.phase;
         const respawnProgress =
           bitePhase === 'respawning'
@@ -832,7 +868,14 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           }
         }
 
-        drawDesireText(ctx, width, height, timestamp, activeBlend);
+        drawDesireText(
+          ctx,
+          width,
+          height,
+          timestamp,
+          activeBlend,
+          `You desire… the ${activeFlavor.desireLabel}.`,
+        );
         drawCinematicVignette(ctx, width, height, lite ? 0.34 : 0.42);
 
         if (!lite && !videoUnderlay) {
@@ -888,6 +931,32 @@ export const MirrorCanvas = forwardRef<HTMLCanvasElement, MirrorCanvasProps>(
           lines.forEach((line, index) => {
             ctx.fillText(line, 16, 16 + index * 20);
           });
+          ctx.restore();
+        }
+
+        if (debugMode) {
+          const now = Date.now();
+          if (now - kioskHealthRef.current.at > 2000) {
+            const summary = summarizeKioskLog();
+            const parts = Object.entries(summary)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 4)
+              .map(([type, count]) => `${type}:${count}`);
+            kioskHealthRef.current = {
+              text:
+                parts.length > 0
+                  ? `Health (24h) — ${parts.join('   ')}`
+                  : 'Health (24h) — no events',
+              at: now,
+            };
+          }
+
+          ctx.save();
+          ctx.fillStyle = 'rgba(250, 246, 239, 0.85)';
+          ctx.font = sansFont(12, 600);
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'top';
+          ctx.fillText(kioskHealthRef.current.text, width - 16, 16);
           ctx.restore();
         }
 

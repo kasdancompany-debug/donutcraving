@@ -6,12 +6,13 @@ import {
 } from '@mediapipe/tasks-vision';
 import { INIT_TIMEOUT_MS } from '../config/performance';
 import type { VisionFrameSource } from '../utils/cameraOrientation';
+import { logKioskEvent } from '../utils/kioskEventLog';
 import { withTimeout } from '../utils/withTimeout';
 
-const WASM_PATH =
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm';
-const MODEL_PATH =
-  'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+// Self-hosted (see public/mediapipe, public/models) — no CDN dependency at
+// runtime so the kiosk survives flaky cafe wifi after the first deploy.
+const WASM_PATH = '/mediapipe/wasm';
+const MODEL_PATH = '/models/face_landmarker.task';
 
 export type FaceTrackingStatus = 'loading' | 'ready' | 'error';
 
@@ -93,6 +94,7 @@ export function useFaceTracking(options: UseFaceTrackingOptions = {}) {
             : 'Failed to initialize face tracking.';
         setError(message);
         setStatus('error');
+        logKioskEvent('face_tracking_error', message);
 
         const delay = Math.min(30_000, 3_000 * 2 ** attempt);
         attempt += 1;

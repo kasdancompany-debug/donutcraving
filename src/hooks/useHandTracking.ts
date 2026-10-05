@@ -6,12 +6,13 @@ import {
 } from '@mediapipe/tasks-vision';
 import { INIT_TIMEOUT_MS } from '../config/performance';
 import type { VisionFrameSource } from '../utils/cameraOrientation';
+import { logKioskEvent } from '../utils/kioskEventLog';
 import { withTimeout } from '../utils/withTimeout';
 
-const WASM_PATH =
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm';
-const MODEL_PATH =
-  'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+// Self-hosted (see public/mediapipe, public/models) — no CDN dependency at
+// runtime so the kiosk survives flaky cafe wifi after the first deploy.
+const WASM_PATH = '/mediapipe/wasm';
+const MODEL_PATH = '/models/hand_landmarker.task';
 
 export type HandTrackingStatus = 'loading' | 'ready' | 'error';
 
@@ -82,6 +83,7 @@ export function useHandTracking(options: UseHandTrackingOptions = {}) {
             : 'Failed to initialize hand tracking.';
         setError(message);
         setStatus('error');
+        logKioskEvent('hand_tracking_error', message);
 
         const delay = Math.min(30_000, 3_000 * 2 ** attempt);
         attempt += 1;

@@ -361,9 +361,34 @@ export function loadDonutImage(imagePath: string): Promise<HTMLImageElement> {
 }
 
 /**
+ * True when every corner of the image is already meaningfully transparent —
+ * i.e. the source is a pre-cut RGBA PNG (donut touches none of the image
+ * edges), not a flat-backdrop JPEG/PNG that still needs chroma-keying.
+ * A flat JPEG backdrop always reads alpha=255 everywhere once drawn to
+ * canvas, so this check is a cheap, reliable discriminator.
+ */
+function hasTransparentCorners(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): boolean {
+  const corners: Array<[number, number]> = [
+    [0, 0],
+    [width - 1, 0],
+    [0, height - 1],
+    [width - 1, height - 1],
+  ];
+  return corners.every(([x, y]) => {
+    const { data } = ctx.getImageData(x, y, 1, 1);
+    return data[3] < 16;
+  });
+}
+
+/**
  * Remove a flat black/near-black studio backdrop, then crop empty margins.
  * Preserves dark saturated colors (e.g. blueberry glaze) so the donut stays
- * solid and cartoon-opaque instead of going see-through.
+ * solid and cartoon-opaque instead of going see-through. Only safe to run
+ * on flat-backdrop sources — see hasTransparentCorners.
  */
 export function knockOutDarkBackground(
   image: HTMLImageElement,
@@ -378,6 +403,14 @@ export function knockOutDarkBackground(
   if (!ctx) return canvas;
 
   ctx.drawImage(image, 0, 0);
+
+  // Already a cut-out RGBA PNG (e.g. background-removed flavor art) —
+  // running the luminance heuristic on it risks eating dark glazes like
+  // chocolate. Just crop the margins and leave pixels untouched.
+  if (hasTransparentCorners(ctx, canvas.width, canvas.height)) {
+    return cropCanvasToAlpha(canvas);
+  }
+
   const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
   for (let i = 0; i < data.length; i += 4) {

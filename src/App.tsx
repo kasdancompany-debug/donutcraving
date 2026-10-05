@@ -15,6 +15,7 @@ import {
 } from './config/branding';
 import { WATCHDOG_STALL_MS } from './config/performance';
 import { useKioskIdleTimeout } from './hooks/useKioskIdleTimeout';
+import { useKioskServiceWorker } from './hooks/useKioskServiceWorker';
 import { kioskProfile } from './utils/kioskMode';
 import { startKioskWatchdog } from './utils/kioskWatchdog';
 import { downloadCanvasScreenshot } from './utils/screenshot';
@@ -38,25 +39,31 @@ function App() {
   const [recalibrateToken, setRecalibrateToken] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const { videoRef, status: cameraStatus, error: cameraError, retry: retryCamera } =
-    useCamera({ lite: isLite });
+  const {
+    videoRef,
+    status: cameraStatus,
+    error: cameraError,
+    retry: retryCamera,
+    cycleCamera,
+  } = useCamera({ lite: isLite });
   const {
     status: trackingStatus,
     error: trackingError,
     detect,
     retry: retryTracking,
   } = useHandTracking({ lite: isLite });
-  const { status: faceStatus, detect: detectFace } = useFaceTracking({
+  const { status: faceStatus, detect: detectFace, retry: retryFace } = useFaceTracking({
     enabled: enableBite,
     lite: isLite,
   });
-  const { status: poseStatus, detect: detectPose } = usePoseTracking({
+  const { status: poseStatus, detect: detectPose, retry: retryPose } = usePoseTracking({
     enabled: enablePose,
     lite: isLite,
     numPoses: 1,
   });
   const { isFullscreen, enter: enterFullscreen, toggle: toggleFullscreen } =
     useFullscreen();
+  const { applyPendingUpdate } = useKioskServiceWorker();
 
   const isLoading =
     cameraStatus === 'idle' ||
@@ -81,7 +88,10 @@ function App() {
     setStarted(false);
     setDebugMode(false);
     setRecalibrateToken((token) => token + 1);
-  }, []);
+    // Attract screen is the one safe moment to swap in a pending deploy —
+    // never mid-session.
+    applyPendingUpdate();
+  }, [applyPendingUpdate]);
 
   const handleStart = useCallback(() => {
     setStarted(true);
@@ -93,7 +103,29 @@ function App() {
   const handleRetry = useCallback(() => {
     if (cameraStatus === 'error') retryCamera();
     if (trackingStatus === 'error') retryTracking();
-  }, [cameraStatus, trackingStatus, retryCamera, retryTracking]);
+    if (enableBite && faceStatus === 'error') retryFace();
+    if (enablePose && poseStatus === 'error') retryPose();
+  }, [
+    cameraStatus,
+    trackingStatus,
+    retryCamera,
+    retryTracking,
+    enableBite,
+    faceStatus,
+    retryFace,
+    enablePose,
+    poseStatus,
+    retryPose,
+  ]);
+
+  /** Unconditional recovery for the watchdog: a silent hang may not have
+   * flipped any hook into 'error', so don't gate on status like handleRetry. */
+  const handleSoftRecover = useCallback(() => {
+    retryCamera();
+    retryTracking();
+    if (enableBite) retryFace();
+    if (enablePose) retryPose();
+  }, [retryCamera, retryTracking, enableBite, retryFace, enablePose, retryPose]);
 
   const { pingActivity } = useKioskIdleTimeout({
     enabled: started && !hasError,
@@ -118,8 +150,11 @@ function App() {
 
   useEffect(() => {
     if (cameraStatus !== 'ready') return;
-    return startKioskWatchdog({ stallMs: WATCHDOG_STALL_MS });
-  }, [cameraStatus]);
+    return startKioskWatchdog({
+      stallMs: WATCHDOG_STALL_MS,
+      onSoftRecover: handleSoftRecover,
+    });
+  }, [cameraStatus, handleSoftRecover]);
 
   useEffect(() => {
     if (!isKiosk) return;
@@ -176,11 +211,21 @@ function App() {
       if (event.key === 's' || event.key === 'S') {
         handleScreenshot();
       }
+      if (event.key === 'c' || event.key === 'C') {
+        void cycleCamera();
+      }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [toggleFullscreen, handleRecalibrate, handleScreenshot, isKiosk, allowDebug]);
+  }, [
+    toggleFullscreen,
+    handleRecalibrate,
+    handleScreenshot,
+    cycleCamera,
+    isKiosk,
+    allowDebug,
+  ]);
 
   const performance = useMemo(
     () => ({
