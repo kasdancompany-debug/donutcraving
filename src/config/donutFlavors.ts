@@ -28,12 +28,12 @@ export interface DonutFlavor {
 export const DONUT_FLAVORS: DonutFlavor[] = [
   {
     id: 'blueberry',
-    desireLabel: 'Blueberry Bliss',
+    desireLabel: 'Blueberry Hibiscus',
     imagePath: DONUT_IMAGE_PATH,
   },
   {
     id: 'vanilla',
-    desireLabel: 'Vanilla Dream',
+    desireLabel: 'Vanilla Bean',
     imagePath: DONUT_WHITE_IMAGE_PATH,
   },
 ];
